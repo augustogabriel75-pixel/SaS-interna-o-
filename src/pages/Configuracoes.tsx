@@ -1,0 +1,109 @@
+import { useRef, useState } from 'react';
+import { Plus, Trash2, Download, Upload, RotateCcw, Minus } from 'lucide-react';
+import { useStore } from '../store';
+import { Campo, useToast } from '../components/ui';
+import { uid } from '../utils/format';
+import type { DB } from '../types';
+
+export default function Configuracoes() {
+  const { db, atualizar, resetar, importar } = useStore();
+  const toast = useToast();
+  const [novo, setNovo] = useState('');
+  const arquivo = useRef<HTMLInputElement>(null);
+  const c = db.config;
+  const ocupados = new Set(db.pacientes.filter((p) => p.status === 'internado').map((p) => p.boxId));
+
+  const exportar = () => {
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `vetinterna-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const carregarArquivo = (f?: File) => {
+    if (!f) return;
+    f.text().then((t) => {
+      try {
+        const d = JSON.parse(t) as DB;
+        if (!d.config || !Array.isArray(d.pacientes)) throw new Error();
+        importar(d);
+        toast('Backup restaurado');
+      } catch {
+        toast('Arquivo de backup inválido', 'erro');
+      }
+    });
+  };
+
+  return (
+    <div className="pagina">
+      <div className="pagina-cab"><div><h1>Configurações</h1><p className="sub">Dados da clínica, equipe e estrutura da internação</p></div></div>
+
+      <section className="cartao">
+        <h2 className="cartao-titulo">Clínica</h2>
+        <div className="grade-form g2">
+          <Campo rotulo="Nome da clínica / hospital"><input value={c.clinica} onChange={(e) => atualizar((d) => { d.config.clinica = e.target.value; })} /></Campo>
+          <Campo rotulo="Telefone / WhatsApp"><input value={c.telefone} onChange={(e) => atualizar((d) => { d.config.telefone = e.target.value; })} /></Campo>
+          <Campo rotulo="Endereço"><input value={c.endereco} onChange={(e) => atualizar((d) => { d.config.endereco = e.target.value; })} /></Campo>
+          <Campo rotulo="CRMV (assinatura dos documentos)"><input value={c.crmv} onChange={(e) => atualizar((d) => { d.config.crmv = e.target.value; })} /></Campo>
+        </div>
+      </section>
+
+      <section className="cartao">
+        <h2 className="cartao-titulo">Equipe</h2>
+        <div className="lista-simples">
+          {c.equipe.map((u, i) => (
+            <div key={u + i} className="item-simples">
+              <input className="flex1" value={u} onChange={(e) => atualizar((d) => { d.config.equipe[i] = e.target.value; })} />
+              <button className="btn-icone perigo" disabled={c.equipe.length <= 1} onClick={() => atualizar((d) => { d.config.equipe.splice(i, 1); if (!d.config.equipe.includes(d.usuarioAtual)) d.usuarioAtual = d.config.equipe[0]; })}><Trash2 size={16} /></button>
+            </div>
+          ))}
+        </div>
+        <div className="nota-nova mt">
+          <input value={novo} onChange={(e) => setNovo(e.target.value)} placeholder="Ex.: Dra. Fernanda Melo" onKeyDown={(e) => { if (e.key === 'Enter' && novo.trim()) { atualizar((d) => { d.config.equipe.push(novo.trim()); }); setNovo(''); } }} />
+          <button className="btn btn-primario" disabled={!novo.trim()} onClick={() => { atualizar((d) => { d.config.equipe.push(novo.trim()); }); setNovo(''); }}><Plus size={16} /> Adicionar</button>
+        </div>
+      </section>
+
+      <section className="cartao">
+        <div className="secao-cab">
+          <h2 className="cartao-titulo">Alas e boxes</h2>
+          <button className="btn btn-sm btn-secundario" onClick={() => atualizar((d) => { const id = uid(); d.config.alas.push({ id, nome: 'Nova ala', cor: '#10b981', boxes: [{ id: id + '-1', nome: 'N01' }] }); })}><Plus size={14} /> Nova ala</button>
+        </div>
+        <div className="lista-alas">
+          {c.alas.map((a, i) => (
+            <div key={a.id} className="item-ala">
+              <input type="color" value={a.cor} onChange={(e) => atualizar((d) => { d.config.alas[i].cor = e.target.value; })} aria-label="Cor da ala" />
+              <input className="flex1" value={a.nome} onChange={(e) => atualizar((d) => { d.config.alas[i].nome = e.target.value; })} />
+              <div className="contador">
+                <button className="btn-icone" aria-label="Remover box" disabled={a.boxes.length <= 1 || ocupados.has(a.boxes[a.boxes.length - 1].id)} onClick={() => atualizar((d) => { d.config.alas[i].boxes.pop(); })}><Minus size={16} /></button>
+                <span>{a.boxes.length} boxes</span>
+                <button className="btn-icone" aria-label="Adicionar box" onClick={() => atualizar((d) => {
+                  const al = d.config.alas[i];
+                  const pref = al.boxes[0]?.nome.replace(/\d+$/, '') || 'B';
+                  const n = al.boxes.length + 1;
+                  al.boxes.push({ id: `${al.id}-${uid()}`, nome: `${pref}${String(n).padStart(2, '0')}` });
+                })}><Plus size={16} /></button>
+              </div>
+              <button className="btn-icone perigo" title="Excluir ala" disabled={a.boxes.some((b) => ocupados.has(b.id))} onClick={() => confirm(`Excluir a ala ${a.nome}?`) && atualizar((d) => { d.config.alas.splice(i, 1); })}><Trash2 size={16} /></button>
+            </div>
+          ))}
+        </div>
+        <small className="muted">Boxes ocupados não podem ser removidos.</small>
+      </section>
+
+      <section className="cartao">
+        <h2 className="cartao-titulo">Dados e backup</h2>
+        <p className="muted">Os dados ficam salvos neste navegador. Faça backups regulares.</p>
+        <div className="acoes">
+          <button className="btn btn-secundario" onClick={exportar}><Download size={16} /> Exportar backup</button>
+          <button className="btn btn-secundario" onClick={() => arquivo.current?.click()}><Upload size={16} /> Restaurar backup</button>
+          <input ref={arquivo} type="file" accept="application/json" hidden onChange={(e) => carregarArquivo(e.target.files?.[0])} />
+          <button className="btn btn-fantasma" onClick={() => confirm('Recarregar os pacientes de demonstração? Os dados atuais serão substituídos.') && resetar(true)}><RotateCcw size={16} /> Dados de demonstração</button>
+          <button className="btn btn-perigo" onClick={() => confirm('Apagar TODOS os dados e começar do zero?') && resetar(false)}><Trash2 size={16} /> Começar do zero</button>
+        </div>
+      </section>
+    </div>
+  );
+}
