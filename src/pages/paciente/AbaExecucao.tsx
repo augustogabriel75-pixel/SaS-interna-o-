@@ -6,7 +6,7 @@ import { dosesPaciente, textoQuantidade, type DoseAgendada } from '../../utils/c
 import { inicioDoDia, fimDoDia, fmtHora } from '../../utils/format';
 import { rotuloFrequencia } from '../../data/medicamentos';
 import AplicarDose from '../../components/AplicarDose';
-import { Vazio } from '../../components/ui';
+import { Vazio, PODE_IMPRIMIR } from '../../components/ui';
 
 const HORAS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -40,7 +40,7 @@ export default function AbaExecucao({ p }: { p: Paciente }) {
             <button className="btn btn-sm btn-fantasma" onClick={() => setDia(inicioDoDia(agora))}>{hoje ? 'Hoje' : dia.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button>
             <button className="btn-icone" onClick={() => mudarDia(1)} aria-label="Próximo dia"><ChevronRight size={18} /></button>
           </div>
-          <button className="btn btn-secundario nao-imprimir" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>
+          {PODE_IMPRIMIR && <button className="btn btn-secundario nao-imprimir" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>}
         </div>
       </div>
 

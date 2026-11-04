@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Pencil, PauseCircle, PlayCircle, Trash2, Zap, Pill, Printer } from 'lucide-react';
 import type { Paciente, Prescricao } from '../../types';
 import { useStore } from '../../store';
-import { Badge, Vazio, useToast } from '../../components/ui';
+import { Badge, Vazio, useToast, useConfirmar, PODE_IMPRIMIR } from '../../components/ui';
 import { rotuloFrequencia } from '../../data/medicamentos';
 import { textoQuantidade, fmtNum, unidadeAtivo, horariosPrescricao } from '../../utils/calc';
 import { fmtDataHora, fmtHora, uid } from '../../utils/format';
@@ -11,6 +11,7 @@ import PrescricaoForm from './PrescricaoForm';
 export default function AbaPrescricao({ p }: { p: Paciente }) {
   const { atualizarPaciente, db, agora } = useStore();
   const toast = useToast();
+  const confirmar = useConfirmar();
   const [form, setForm] = useState<{ editar?: Prescricao } | null>(null);
   const ativas = p.prescricoes.filter((x) => x.ativa);
   const inativas = p.prescricoes.filter((x) => !x.ativa);
@@ -25,8 +26,8 @@ export default function AbaPrescricao({ p }: { p: Paciente }) {
     r.ativa = true;
     r.suspensaEm = undefined;
   });
-  const excluir = (pr: Prescricao) => {
-    if (!confirm(`Excluir a prescrição de ${pr.nome}? Os registros de aplicação também serão removidos.`)) return;
+  const excluir = async (pr: Prescricao) => {
+    if (!(await confirmar({ titulo: `Excluir a prescrição de ${pr.nome}?`, texto: 'Os registros de aplicação desta medicação também serão removidos. Para manter o histórico, use Suspender.', botao: 'Excluir', perigo: true }))) return;
     atualizarPaciente(p.id, (x) => {
       x.prescricoes = x.prescricoes.filter((i) => i.id !== pr.id);
       x.aplicacoes = x.aplicacoes.filter((a) => a.prescricaoId !== pr.id);
@@ -85,7 +86,7 @@ export default function AbaPrescricao({ p }: { p: Paciente }) {
       <div className="secao-cab">
         <h2>Prescrição médica</h2>
         <div className="acoes">
-          <button className="btn btn-secundario nao-imprimir" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>
+          {PODE_IMPRIMIR && <button className="btn btn-secundario nao-imprimir" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>}
           <button className="btn btn-primario nao-imprimir" onClick={() => setForm({})}><Plus size={18} /> Prescrever</button>
         </div>
       </div>

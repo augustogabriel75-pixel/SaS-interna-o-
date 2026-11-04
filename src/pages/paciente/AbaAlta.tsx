@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { LogOut, Printer, RotateCcw, Wand2, MessageCircle } from 'lucide-react';
 import type { Paciente, StatusInternacao } from '../../types';
 import { useStore, nomeBox } from '../../store';
-import { Campo, Chips, useToast } from '../../components/ui';
+import { Campo, Chips, useToast, useConfirmar, PODE_IMPRIMIR } from '../../components/ui';
 import { fmtData, fmtDataHora, toLocalInput, fromLocalInput, toDateInput, especieRotulo, sexoRotulo, diasInternado, linkWhatsApp } from '../../utils/format';
 import { rotuloFrequencia } from '../../data/medicamentos';
 import { textoQuantidade } from '../../utils/calc';
@@ -22,6 +22,7 @@ const ORIENTACOES = [
 export default function AbaAlta({ p }: { p: Paciente }) {
   const { db, atualizarPaciente } = useStore();
   const toast = useToast();
+  const confirmar = useConfirmar();
   const [f, setF] = useState(() => ({
     tipo: (p.alta?.tipo ?? 'alta') as StatusInternacao,
     data: toLocalInput(p.alta?.data ?? new Date()),
@@ -64,9 +65,9 @@ export default function AbaAlta({ p }: { p: Paciente }) {
 
   const imprimir = () => imprimirDocumento(`Alta — ${p.nome}`, sumarioHtml(), db.config);
 
-  const confirmar = () => {
+  const confirmarSaida = async () => {
     const msg = f.tipo === 'alta' ? `Confirmar ALTA de ${p.nome}? O box será liberado.` : f.tipo === 'obito' ? `Registrar ÓBITO de ${p.nome}?` : `Registrar TRANSFERÊNCIA de ${p.nome}?`;
-    if (!confirm(msg)) return;
+    if (!(await confirmar({ titulo: msg, botao: 'Confirmar', perigo: f.tipo === 'obito' }))) return;
     const agora = fromLocalInput(f.data);
     atualizarPaciente(p.id, (x) => {
       x.status = f.tipo;
@@ -78,14 +79,17 @@ export default function AbaAlta({ p }: { p: Paciente }) {
     toast(f.tipo === 'alta' ? `Alta de ${p.nome} registrada` : 'Saída registrada');
   };
 
-  const reabrir = () => {
-    if (!confirm('Reabrir a internação deste paciente? Selecione um box em "Editar dados".')) return;
+  const reabrir = async () => {
+    if (!(await confirmar({ titulo: 'Reabrir a internação?', texto: 'O paciente volta para a lista de internados. Escolha um box na aba Resumo.', botao: 'Reabrir' }))) return;
     atualizarPaciente(p.id, (x) => { x.status = 'internado'; x.alta = undefined; });
   };
 
   const mensagemAlta = () => {
+    return linkWhatsApp(p.tutor.telefone, textoAlta());
+  };
+  const textoAlta = () => {
     const t = `🏥 *${db.config.clinica}*\n\nOlá, ${p.tutor.nome}! ${p.nome} recebeu alta hoje 🎉\n\n*Condição:* ${f.condicao}\n${f.receita ? `\n*Medicações para casa:*\n${f.receita}\n` : ''}${f.orientacoes ? `\n*Orientações:*\n${f.orientacoes}\n` : ''}${f.retorno ? `\n*Retorno:* ${fmtData(f.retorno + 'T12:00')}\n` : ''}\nQualquer dúvida, estamos à disposição!\n_${p.veterinario}_`;
-    window.open(linkWhatsApp(p.tutor.telefone, t), '_blank');
+    return t;
   };
 
   if (p.status !== 'internado' && p.alta) {
@@ -94,8 +98,8 @@ export default function AbaAlta({ p }: { p: Paciente }) {
         <div className="secao-cab">
           <h2>{p.status === 'alta' ? 'Alta registrada' : p.status === 'obito' ? 'Óbito registrado' : 'Transferência registrada'}</h2>
           <div className="acoes">
-            <button className="btn btn-secundario" onClick={imprimir}><Printer size={16} /> Imprimir sumário</button>
-            {p.status === 'alta' && <button className="btn btn-whats" onClick={mensagemAlta}><MessageCircle size={16} /> Enviar ao tutor</button>}
+            {PODE_IMPRIMIR && <button className="btn btn-secundario" onClick={imprimir}><Printer size={16} /> Imprimir sumário</button>}
+            {p.status === 'alta' && p.tutor.telefone && <a className="btn btn-whats" href={mensagemAlta()} target="_blank" rel="noreferrer"><MessageCircle size={16} /> Enviar ao tutor</a>}
             <button className="btn btn-fantasma" onClick={reabrir}><RotateCcw size={16} /> Reabrir internação</button>
           </div>
         </div>
@@ -137,8 +141,8 @@ export default function AbaAlta({ p }: { p: Paciente }) {
         </div>
         <div className="rodape-form">
           <span className="muted flex1">Box atual: {nomeBox(db.config, p.boxId)}</span>
-          <button className="btn btn-secundario" onClick={imprimir}><Printer size={16} /> Pré-visualizar / imprimir</button>
-          <button className={`btn ${f.tipo === 'obito' ? 'btn-perigo' : 'btn-primario'}`} onClick={confirmar}><LogOut size={18} /> Confirmar {f.tipo === 'alta' ? 'alta' : f.tipo === 'obito' ? 'óbito' : 'transferência'}</button>
+          {PODE_IMPRIMIR && <button className="btn btn-secundario" onClick={imprimir}><Printer size={16} /> Pré-visualizar / imprimir</button>}
+          <button className={`btn ${f.tipo === 'obito' ? 'btn-perigo' : 'btn-primario'}`} onClick={confirmarSaida}><LogOut size={18} /> Confirmar {f.tipo === 'alta' ? 'alta' : f.tipo === 'obito' ? 'óbito' : 'transferência'}</button>
         </div>
       </div>
     </div>

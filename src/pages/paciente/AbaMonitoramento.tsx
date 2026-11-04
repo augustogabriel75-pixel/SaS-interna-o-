@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Save, Activity } from 'lucide-react';
 import type { Paciente, Registro } from '../../types';
 import { useStore } from '../../store';
-import { Campo, Chips, Vazio, useToast } from '../../components/ui';
+import { Campo, Chips, Vazio, useToast, useConfirmar } from '../../components/ui';
 import { foraDaFaixa, REFERENCIAS, fmtNum } from '../../utils/calc';
 import { fmtDataHora, toLocalInput, fromLocalInput, uid, fmtHora, fmtData } from '../../utils/format';
 
@@ -32,6 +32,7 @@ const NUMS: { k: Num; r: string; u: string; passo?: string }[] = [
 export default function AbaMonitoramento({ p }: { p: Paciente }) {
   const { db, atualizarPaciente } = useStore();
   const toast = useToast();
+  const confirmar = useConfirmar();
   const [aberto, setAberto] = useState(p.registros.length === 0);
   const vazio = (): Partial<Registro> & { dataHoraLocal: string; nums: Partial<Record<Num, string>> } => ({ dataHoraLocal: toLocalInput(), nums: {} });
   const [r, setR] = useState(vazio);
@@ -56,8 +57,8 @@ export default function AbaMonitoramento({ p }: { p: Paciente }) {
     setAberto(false);
   };
 
-  const excluir = (id: string) => {
-    if (!confirm('Excluir este registro?')) return;
+  const excluir = async (id: string) => {
+    if (!(await confirmar({ titulo: 'Excluir este registro de monitoramento?', botao: 'Excluir', perigo: true }))) return;
     atualizarPaciente(p.id, (x) => { x.registros = x.registros.filter((i) => i.id !== id); });
   };
 

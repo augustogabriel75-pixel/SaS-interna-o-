@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { RefreshCw, Copy, Printer, Save, MessageCircle, FileText, Trash2 } from 'lucide-react';
 import type { Paciente } from '../../types';
 import { useStore } from '../../store';
-import { Campo, Chips, Badge, useToast } from '../../components/ui';
+import { Campo, Chips, Badge, useToast, PODE_IMPRIMIR } from '../../components/ui';
 import { gerarBoletim, OPCOES_PADRAO, type OpcoesBoletim } from '../../utils/boletim';
 import { fmtDataHora, linkWhatsApp, uid } from '../../utils/format';
 import { imprimirDocumento, textoParaHtml } from '../../utils/imprimir';
@@ -42,11 +42,6 @@ export default function AbaBoletim({ p }: { p: Paciente }) {
     }
   };
 
-  const whatsapp = () => {
-    if (!p.tutor.telefone) return toast('Cadastre o telefone do tutor', 'erro');
-    salvarHistorico(true);
-    window.open(linkWhatsApp(p.tutor.telefone, texto), '_blank');
-  };
 
   const imprimir = () => imprimirDocumento(`Boletim — ${p.nome}`, `<h2>Boletim médico</h2><div>${textoParaHtml(texto)}</div>`, db.config);
 
@@ -85,9 +80,13 @@ export default function AbaBoletim({ p }: { p: Paciente }) {
           </div>
           <textarea className="boletim-texto" value={texto} onChange={(e) => { setTexto(e.target.value); setEditado(true); }} />
           <div className="boletim-acoes">
-            <button className="btn btn-whats" onClick={whatsapp}><MessageCircle size={18} /> Enviar no WhatsApp</button>
+            {p.tutor.telefone ? (
+              <a className="btn btn-whats" href={linkWhatsApp(p.tutor.telefone, texto)} target="_blank" rel="noreferrer" onClick={() => salvarHistorico(true)}><MessageCircle size={18} /> Enviar no WhatsApp</a>
+            ) : (
+              <button className="btn btn-whats" onClick={() => toast('Cadastre o telefone do tutor em Editar dados', 'erro')}><MessageCircle size={18} /> Enviar no WhatsApp</button>
+            )}
             <button className="btn btn-secundario" onClick={copiar}><Copy size={16} /> Copiar</button>
-            <button className="btn btn-secundario" onClick={imprimir}><Printer size={16} /> Imprimir / PDF</button>
+            {PODE_IMPRIMIR && <button className="btn btn-secundario" onClick={imprimir}><Printer size={16} /> Imprimir / PDF</button>}
             <button className="btn btn-secundario" onClick={() => { salvarHistorico(); toast('Boletim salvo no histórico'); }}><Save size={16} /> Salvar</button>
           </div>
           <small className="muted">Enviando para: {p.tutor.nome} • {p.tutor.telefone || 'sem telefone'}</small>

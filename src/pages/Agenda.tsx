@@ -3,7 +3,7 @@ import { Check, Clock, Printer } from 'lucide-react';
 import { useStore, nomeBox } from '../store';
 import { dosesPaciente, textoQuantidade, type DoseAgendada } from '../utils/calc';
 import { fmtHora, fmtData, relativo, uid } from '../utils/format';
-import { Badge, Chips, Vazio, useToast } from '../components/ui';
+import { Badge, Chips, Vazio, useToast, PODE_IMPRIMIR } from '../components/ui';
 import AplicarDose, { STATUS_DOSE } from '../components/AplicarDose';
 import { IconeEspecie } from './Painel';
 import { ir } from '../router';
@@ -58,7 +58,7 @@ export default function Agenda() {
           <p className="sub">Checagem de todas as medicações da internação • {atrasadas > 0 ? <b className="txt-perigo">{atrasadas} atrasada(s)</b> : 'nenhuma atrasada'}</p>
         </div>
         <div className="acoes">
-          <button className="btn btn-secundario" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>
+          {PODE_IMPRIMIR && <button className="btn btn-secundario" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>}
         </div>
       </div>
 

@@ -125,3 +125,40 @@ export function Stat({ rotulo, valor, icone, tom = 'neutro', onClick }: { rotulo
     </button>
   );
 }
+
+// ───── Confirmação (substitui window.confirm)
+type PedidoConfirmacao = { titulo: string; texto?: string; botao?: string; perigo?: boolean };
+const ConfirmCtx = createContext<(p: PedidoConfirmacao) => Promise<boolean>>(async () => false);
+
+export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [pedido, setPedido] = useState<(PedidoConfirmacao & { resolver: (v: boolean) => void }) | null>(null);
+  const confirmar = useCallback((p: PedidoConfirmacao) => new Promise<boolean>((resolver) => setPedido({ ...p, resolver })), []);
+  const responder = (v: boolean) => {
+    pedido?.resolver(v);
+    setPedido(null);
+  };
+  return (
+    <ConfirmCtx.Provider value={confirmar}>
+      {children}
+      <Modal
+        aberto={!!pedido}
+        onFechar={() => responder(false)}
+        titulo={pedido?.titulo ?? ''}
+        rodape={
+          <>
+            <span className="flex1" />
+            <button className="btn btn-secundario" onClick={() => responder(false)}>Cancelar</button>
+            <button className={`btn ${pedido?.perigo ? 'btn-perigo' : 'btn-primario'}`} onClick={() => responder(true)} autoFocus>{pedido?.botao ?? 'Confirmar'}</button>
+          </>
+        }
+      >
+        {pedido?.texto && <p className="sem-margem">{pedido.texto}</p>}
+      </Modal>
+    </ConfirmCtx.Provider>
+  );
+}
+
+export const useConfirmar = () => useContext(ConfirmCtx);
+
+/** Dentro de um iframe (pré-visualização) a impressão do navegador fica bloqueada */
+export const PODE_IMPRIMIR = typeof window !== 'undefined' && window.self === window.top;

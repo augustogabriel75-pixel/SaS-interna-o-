@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
 import { Plus, Trash2, Download, Upload, RotateCcw, Minus } from 'lucide-react';
 import { useStore } from '../store';
-import { Campo, useToast } from '../components/ui';
+import { Campo, useToast, useConfirmar } from '../components/ui';
 import { uid } from '../utils/format';
 import type { DB } from '../types';
 
 export default function Configuracoes() {
   const { db, atualizar, resetar, importar } = useStore();
   const toast = useToast();
+  const confirmar = useConfirmar();
   const [novo, setNovo] = useState('');
   const arquivo = useRef<HTMLInputElement>(null);
   const c = db.config;
@@ -86,7 +87,7 @@ export default function Configuracoes() {
                   al.boxes.push({ id: `${al.id}-${uid()}`, nome: `${pref}${String(n).padStart(2, '0')}` });
                 })}><Plus size={16} /></button>
               </div>
-              <button className="btn-icone perigo" title="Excluir ala" disabled={a.boxes.some((b) => ocupados.has(b.id))} onClick={() => confirm(`Excluir a ala ${a.nome}?`) && atualizar((d) => { d.config.alas.splice(i, 1); })}><Trash2 size={16} /></button>
+              <button className="btn-icone perigo" title="Excluir ala" disabled={a.boxes.some((b) => ocupados.has(b.id))} onClick={async () => (await confirmar({ titulo: `Excluir a ala ${a.nome}?`, botao: 'Excluir', perigo: true })) && atualizar((d) => { d.config.alas.splice(i, 1); })}><Trash2 size={16} /></button>
             </div>
           ))}
         </div>
@@ -100,8 +101,8 @@ export default function Configuracoes() {
           <button className="btn btn-secundario" onClick={exportar}><Download size={16} /> Exportar backup</button>
           <button className="btn btn-secundario" onClick={() => arquivo.current?.click()}><Upload size={16} /> Restaurar backup</button>
           <input ref={arquivo} type="file" accept="application/json" hidden onChange={(e) => carregarArquivo(e.target.files?.[0])} />
-          <button className="btn btn-fantasma" onClick={() => confirm('Recarregar os pacientes de demonstração? Os dados atuais serão substituídos.') && resetar(true)}><RotateCcw size={16} /> Dados de demonstração</button>
-          <button className="btn btn-perigo" onClick={() => confirm('Apagar TODOS os dados e começar do zero?') && resetar(false)}><Trash2 size={16} /> Começar do zero</button>
+          <button className="btn btn-fantasma" onClick={async () => (await confirmar({ titulo: 'Recarregar dados de demonstração?', texto: 'Os dados atuais serão substituídos pelos pacientes de exemplo.', botao: 'Recarregar' })) && resetar(true)}><RotateCcw size={16} /> Dados de demonstração</button>
+          <button className="btn btn-perigo" onClick={async () => (await confirmar({ titulo: 'Apagar todos os dados?', texto: 'Pacientes, prescrições e registros serão apagados. Exporte um backup antes, se precisar.', botao: 'Apagar tudo', perigo: true })) && resetar(false)}><Trash2 size={16} /> Começar do zero</button>
         </div>
       </section>
     </div>
