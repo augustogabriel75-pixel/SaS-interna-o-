@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { usePode } from '../auth';
 import { Plus, Search, Users } from 'lucide-react';
 import { useStore, nomeBox } from '../store';
-import { Badge, Chips, Vazio } from '../components/ui';
+import { Badge, Chips, Vazio, useToast } from '../components/ui';
 import { fmtData, tempoInternado } from '../utils/format';
 import { GRAV, IconeEspecie } from './Painel';
 import { ir } from '../router';
@@ -15,7 +16,9 @@ const STATUS: Record<StatusInternacao, { r: string; tom: 'ok' | 'info' | 'neutro
 };
 
 export default function Pacientes() {
-  const { db, agora } = useStore();
+  const { db, agora, sync, carregarHistorico } = useStore();
+  const pode = usePode();
+  const toast = useToast();
   const [filtro, setFiltro] = useState<StatusInternacao | undefined>('internado');
   const [busca, setBusca] = useState('');
   const lista = db.pacientes
@@ -30,7 +33,10 @@ export default function Pacientes() {
           <h1>Pacientes</h1>
           <p className="sub">Histórico de internações</p>
         </div>
-        <button className="btn btn-primario" onClick={() => ir('/internar')}><Plus size={18} /> Nova internação</button>
+        <div className="acoes">
+          {sync.modo === 'nuvem' && <button className="btn btn-secundario" disabled={!sync.online} onClick={() => carregarHistorico().then((n) => toast(`${n} paciente(s) no histórico`)).catch((e) => toast(e.message, 'erro'))}>Buscar histórico completo</button>}
+          {pode.internar && <button className="btn btn-primario" onClick={() => ir('/internar')}><Plus size={18} /> Nova internação</button>}
+        </div>
       </div>
       <div className="filtros cartao">
         <Chips<StatusInternacao> valor={filtro} onChange={setFiltro} opcoes={[

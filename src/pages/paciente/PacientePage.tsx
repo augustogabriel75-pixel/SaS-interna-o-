@@ -1,4 +1,5 @@
 import { ArrowLeft, Pencil, MessageCircle, Phone, ShieldAlert, AlertTriangle, LayoutDashboard, Pill, CalendarClock, Activity, Droplets, FileText, LogOut } from 'lucide-react';
+import { usePode } from '../../auth';
 import { useStore, nomeBox } from '../../store';
 import { Abas, Badge, Vazio } from '../../components/ui';
 import { GRAV, IconeEspecie } from '../Painel';
@@ -17,6 +18,7 @@ type AbaId = 'resumo' | 'prescricao' | 'execucao' | 'monitoramento' | 'fluido' |
 
 export default function PacientePage({ id, aba }: { id: string; aba?: string }) {
   const { db, paciente, agora } = useStore();
+  const pode = usePode();
   const p = paciente(id);
   if (!p) return <div className="pagina"><Vazio titulo="Paciente não encontrado" acao={<button className="btn btn-primario" onClick={() => ir('/painel')}>Voltar ao mapa</button>} /></div>;
 
@@ -57,7 +59,7 @@ export default function PacientePage({ id, aba }: { id: string; aba?: string }) 
           <div className="acoes">
             {p.tutor.telefone && <a className="btn-icone" href={`tel:${p.tutor.telefone.replace(/\D/g, '')}`} title="Ligar"><Phone size={18} /></a>}
             {p.tutor.telefone && <a className="btn-icone whats" href={linkWhatsApp(p.tutor.telefone, `Olá, ${p.tutor.nome}! Aqui é da ${db.config.clinica}, sobre o(a) ${p.nome}.`)} target="_blank" rel="noreferrer" title="WhatsApp"><MessageCircle size={18} /></a>}
-            <button className="btn btn-sm btn-secundario" onClick={() => ir(`/internar?editar=${p.id}`)}><Pencil size={14} /> Editar dados</button>
+            {pode.editarPaciente && <button className="btn btn-sm btn-secundario" onClick={() => ir(`/internar?editar=${p.id}`)}><Pencil size={14} /> Editar dados</button>}
           </div>
         </div>
       </div>
@@ -78,8 +80,8 @@ export default function PacientePage({ id, aba }: { id: string; aba?: string }) 
           { id: 'execucao', rotulo: 'Execução', icone: <CalendarClock size={16} />, contador: atrasadas },
           { id: 'monitoramento', rotulo: 'Monitoramento', icone: <Activity size={16} /> },
           { id: 'fluido', rotulo: 'Soro / Fluido', icone: <Droplets size={16} /> },
-          { id: 'boletim', rotulo: 'Boletim', icone: <FileText size={16} /> },
-          { id: 'alta', rotulo: internado ? 'Alta' : 'Saída', icone: <LogOut size={16} /> },
+          ...(pode.boletim ? [{ id: 'boletim' as const, rotulo: 'Boletim', icone: <FileText size={16} /> }] : []),
+          ...(pode.alta || !internado ? [{ id: 'alta' as const, rotulo: internado ? 'Alta' : 'Saída', icone: <LogOut size={16} /> }] : []),
         ]}
       />
 
@@ -88,8 +90,8 @@ export default function PacientePage({ id, aba }: { id: string; aba?: string }) 
       {ativa === 'execucao' && <AbaExecucao p={p} />}
       {ativa === 'monitoramento' && <AbaMonitoramento p={p} />}
       {ativa === 'fluido' && <AbaFluido p={p} />}
-      {ativa === 'boletim' && <AbaBoletim p={p} />}
-      {ativa === 'alta' && <AbaAlta key={p.id + p.status} p={p} />}
+      {ativa === 'boletim' && pode.boletim && <AbaBoletim p={p} />}
+      {ativa === 'alta' && (pode.alta || !internado) && <AbaAlta key={p.id + p.status} p={p} />}
     </div>
   );
 }

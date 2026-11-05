@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePode } from '../../auth';
 import { Plus, Trash2, Save, Activity } from 'lucide-react';
 import type { Paciente, Registro } from '../../types';
 import { useStore } from '../../store';
@@ -32,6 +33,7 @@ const NUMS: { k: Num; r: string; u: string; passo?: string }[] = [
 export default function AbaMonitoramento({ p }: { p: Paciente }) {
   const { db, atualizarPaciente } = useStore();
   const toast = useToast();
+  const pode = usePode();
   const confirmar = useConfirmar();
   const [aberto, setAberto] = useState(p.registros.length === 0);
   const vazio = (): Partial<Registro> & { dataHoraLocal: string; nums: Partial<Record<Num, string>> } => ({ dataHoraLocal: toLocalInput(), nums: {} });
@@ -168,7 +170,7 @@ export default function AbaMonitoramento({ p }: { p: Paciente }) {
                   <td className="cel-obs">
                     {[g.mucosas && `Mucosas ${ROT.mucosas[g.mucosas].toLowerCase()}`, g.consciencia && ROT.consciencia[g.consciencia], g.glicemia && `Glic. ${g.glicemia}`, g.pas && `PAS ${g.pas}`, g.obs].filter(Boolean).join(' • ')}
                   </td>
-                  <td><button className="btn-icone perigo" onClick={() => excluir(g.id)} title="Excluir"><Trash2 size={15} /></button></td>
+                  <td>{(pode.editarPaciente || g.responsavel === db.usuarioAtual) && <button className="btn-icone perigo" onClick={() => excluir(g.id)} title="Excluir"><Trash2 size={15} /></button>}</td>
                 </tr>
               ))}
             </tbody>

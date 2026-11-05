@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePode } from '../../auth';
 import { Plus, Pencil, PauseCircle, PlayCircle, Trash2, Zap, Pill, Printer } from 'lucide-react';
 import type { Paciente, Prescricao } from '../../types';
 import { useStore } from '../../store';
@@ -11,6 +12,7 @@ import PrescricaoForm from './PrescricaoForm';
 export default function AbaPrescricao({ p }: { p: Paciente }) {
   const { atualizarPaciente, db, agora } = useStore();
   const toast = useToast();
+  const pode = usePode();
   const confirmar = useConfirmar();
   const [form, setForm] = useState<{ editar?: Prescricao } | null>(null);
   const ativas = p.prescricoes.filter((x) => x.ativa);
@@ -69,6 +71,7 @@ export default function AbaPrescricao({ p }: { p: Paciente }) {
         </div>
         <div className="rx-acoes nao-imprimir">
           {pr.ativa && pr.seNecessario && <button className="btn btn-sm btn-sucesso" onClick={() => aplicarSOS(pr)}><Zap size={14} /> Aplicar agora</button>}
+          {pode.prescrever && <>
           <button className="btn-icone" title="Editar" onClick={() => setForm({ editar: pr })}><Pencil size={17} /></button>
           {pr.ativa ? (
             <button className="btn-icone" title="Suspender" onClick={() => suspender(pr)}><PauseCircle size={17} /></button>
@@ -76,6 +79,7 @@ export default function AbaPrescricao({ p }: { p: Paciente }) {
             <button className="btn-icone" title="Reativar" onClick={() => reativar(pr)}><PlayCircle size={17} /></button>
           )}
           <button className="btn-icone perigo" title="Excluir" onClick={() => excluir(pr)}><Trash2 size={17} /></button>
+          </>}
         </div>
       </div>
     );
@@ -87,11 +91,11 @@ export default function AbaPrescricao({ p }: { p: Paciente }) {
         <h2>Prescrição médica</h2>
         <div className="acoes">
           {PODE_IMPRIMIR && <button className="btn btn-secundario nao-imprimir" onClick={() => window.print()}><Printer size={16} /> Imprimir</button>}
-          <button className="btn btn-primario nao-imprimir" onClick={() => setForm({})}><Plus size={18} /> Prescrever</button>
+          {pode.prescrever && <button className="btn btn-primario nao-imprimir" onClick={() => setForm({})}><Plus size={18} /> Prescrever</button>}
         </div>
       </div>
       {p.prescricoes.length === 0 ? (
-        <Vazio icone={<Pill size={36} />} titulo="Nenhuma medicação prescrita" texto="Adicione as medicações do paciente. Dose e volume são calculados automaticamente pelo peso." acao={<button className="btn btn-primario" onClick={() => setForm({})}><Plus size={18} /> Prescrever medicação</button>} />
+        <Vazio icone={<Pill size={36} />} titulo="Nenhuma medicação prescrita" texto="Adicione as medicações do paciente. Dose e volume são calculados automaticamente pelo peso." acao={pode.prescrever ? <button className="btn btn-primario" onClick={() => setForm({})}><Plus size={18} /> Prescrever medicação</button> : undefined} />
       ) : (
         <>
           <div className="cartao lista-rx">{ativas.map((pr) => <Linha key={pr.id} pr={pr} />)}{ativas.length === 0 && <p className="muted">Nenhuma prescrição ativa.</p>}</div>

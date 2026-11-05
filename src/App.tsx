@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  LayoutGrid, Clock, Users, PlusCircle, Calculator, Pill, Settings, Menu, X, UserCircle2, Stethoscope,
+  LayoutGrid, Clock, Users, PlusCircle, Calculator, Pill, Settings, Menu, X, UserCircle2, Stethoscope, ShieldCheck, LogOut, Cloud, CloudOff, RefreshCw, Lock,
 } from 'lucide-react';
 import { useRota, ir } from './router';
 import { useStore, nomesEquipe } from './store';
@@ -15,21 +15,39 @@ import PacientePage from './pages/paciente/PacientePage';
 import Calculadoras from './pages/Calculadoras';
 import Bulario from './pages/Bulario';
 import Configuracoes from './pages/Configuracoes';
+import Admin from './pages/Admin';
+import { useAuth, PAPEIS, type Permissoes } from './auth';
+import { NUVEM } from './lib/supabase';
+import { Vazio } from './components/ui';
 
-const MENU = [
+type ItemMenu = { id: string; rotulo: string; icone: typeof LayoutGrid; exige?: keyof Permissoes; so?: 'nuvem' | 'local' };
+
+const MENU: ItemMenu[] = [
   { id: 'painel', rotulo: 'Mapa de internação', icone: LayoutGrid },
   { id: 'agenda', rotulo: 'Agenda de medicações', icone: Clock },
-  { id: 'internar', rotulo: 'Nova internação', icone: PlusCircle },
+  { id: 'internar', rotulo: 'Nova internação', icone: PlusCircle, exige: 'internar' },
   { id: 'pacientes', rotulo: 'Pacientes', icone: Users },
-  { id: 'equipe', rotulo: 'Profissionais', icone: Stethoscope },
+  { id: 'equipe', rotulo: 'Profissionais', icone: Stethoscope, so: 'local' },
   { id: 'calculadoras', rotulo: 'Calculadoras', icone: Calculator },
   { id: 'bulario', rotulo: 'Bulário', icone: Pill },
-  { id: 'config', rotulo: 'Configurações', icone: Settings },
+  { id: 'config', rotulo: 'Configurações', icone: Settings, exige: 'configurar' },
+  { id: 'admin', rotulo: 'Painel administrativo', icone: ShieldCheck, exige: 'admin', so: 'nuvem' },
 ];
+
+const ROTA_EXIGE: Record<string, keyof Permissoes> = { internar: 'internar', config: 'configurar', admin: 'admin' };
+
+function SemPermissao() {
+  return (
+    <div className="pagina">
+      <Vazio icone={<Lock size={36} />} titulo="Seu nível de acesso não permite abrir esta tela" texto="Fale com o administrador da clínica se precisar desta permissão." acao={<a className="btn btn-primario" href="#/painel">Voltar ao mapa</a>} />
+    </div>
+  );
+}
 
 export default function App() {
   const { partes, params } = useRota();
-  const { db, atualizar, agora } = useStore();
+  const { db, atualizar, agora, sync, sincronizar } = useStore();
+  const { perfil, pode, sair } = useAuth();
   const [menuAberto, setMenuAberto] = useState(false);
   const pagina = partes[0] || 'painel';
   const equipe = nomesEquipe(db.config);
@@ -42,8 +60,13 @@ export default function App() {
       .filter((d) => d.status === 'atrasado').length;
   }, [db.pacientes, agora]);
 
+  const menu = MENU.filter((m) => (!m.exige || pode[m.exige]) && (!m.so || (m.so === 'nuvem') === NUVEM));
+  const editando = pagina === 'internar' && params.get('editar');
+  const bloqueado = (ROTA_EXIGE[pagina] && !pode[ROTA_EXIGE[pagina]] && !(editando && pode.editarPaciente)) || (pagina === 'admin' && !NUVEM) || (pagina === 'equipe' && NUVEM);
+
   let conteudo;
-  switch (pagina) {
+  if (bloqueado) conteudo = <SemPermissao />;
+  else switch (pagina) {
     case 'agenda': conteudo = <Agenda />; break;
     case 'pacientes': conteudo = <Pacientes />; break;
     case 'internar': conteudo = <Internar boxInicial={params.get('box') ?? undefined} editarId={params.get('editar') ?? undefined} />; break;
@@ -52,6 +75,7 @@ export default function App() {
     case 'bulario': conteudo = <Bulario />; break;
     case 'config': conteudo = <Configuracoes />; break;
     case 'equipe': conteudo = <Equipe />; break;
+    case 'admin': conteudo = <Admin />; break;
     default: conteudo = <Painel />;
   }
 
@@ -67,7 +91,7 @@ export default function App() {
           <button className="btn-icone so-mobile" onClick={() => setMenuAberto(false)} aria-label="Fechar menu"><X size={20} /></button>
         </div>
         <nav>
-          {MENU.map((m) => {
+          {menu.map((m) => {
             const Icone = m.icone;
             const ativo = pagina === m.id || (m.id === 'pacientes' && pagina === 'paciente');
             return (
@@ -80,7 +104,22 @@ export default function App() {
           })}
         </nav>
         <div className="lateral-rodape">
-          {equipe.length ? (
+          {NUVEM && perfil ? (
+            <>
+              <div className="usuario-logado">
+                <UserCircle2 size={22} />
+                <div className="flex1">
+                  <strong>{perfil.nome}</strong>
+                  <small>{PAPEIS[perfil.papel].r}</small>
+                </div>
+                <button className="btn-icone" onClick={sair} title="Sair" aria-label="Sair"><LogOut size={18} /></button>
+              </div>
+              <button className={`status-sync ${sync.online ? (sync.pendentes ? 'pendente' : 'ok') : 'offline'}`} onClick={() => sincronizar()} title="Sincronizar agora">
+                {sync.online ? (sync.sincronizando ? <RefreshCw size={14} className="girando" /> : <Cloud size={14} />) : <CloudOff size={14} />}
+                {!sync.online ? `Sem internet${sync.pendentes ? ` • ${sync.pendentes} pendente(s)` : ' • salvo no aparelho'}` : sync.pendentes ? `Enviando ${sync.pendentes} alteração(ões)…` : 'Sincronizado'}
+              </button>
+            </>
+          ) : equipe.length ? (
             <label className="usuario">
               <UserCircle2 size={20} />
               <select value={db.usuarioAtual} onChange={(e) => atualizar((d) => { d.usuarioAtual = e.target.value; })} aria-label="Profissional de plantão">
@@ -99,7 +138,7 @@ export default function App() {
       <div className="principal">
         <header className="topo so-mobile">
           <button className="btn-icone" onClick={() => setMenuAberto(true)} aria-label="Abrir menu"><Menu size={22} /></button>
-          <span className="topo-marca"><img src={logoCirculo} alt="" /> <strong>{db.config.clinica.split(' ')[0] || 'VetClin'}</strong></span>
+          <span className="topo-marca"><img src={logoCirculo} alt="" /> <strong>{db.config.clinica.split(' ')[0] || 'VetClin'}</strong>{NUVEM && !sync.online && <CloudOff size={16} className="txt-alerta" aria-label="Sem internet" />}</span>
           <button className="btn-icone" onClick={() => ir('/agenda')} aria-label="Agenda">
             <Clock size={20} />
             {atrasadas > 0 && <span className="ponto-alerta">{atrasadas}</span>}

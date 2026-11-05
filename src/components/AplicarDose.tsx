@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NUVEM } from '../lib/supabase';
 import { Check, Undo2, XCircle } from 'lucide-react';
 import { Modal, Campo, Badge, useToast } from './ui';
 import { useStore, nomesEquipe } from '../store';
@@ -96,7 +97,9 @@ export default function AplicarDose({ dose, onFechar }: { dose: DoseAgendada | n
           <input type="datetime-local" value={quando} onChange={(e) => setQuando(e.target.value)} />
         </Campo>
         <Campo rotulo="Responsável">
-          {nomesEquipe(db.config).length ? (
+          {NUVEM ? (
+            <input value={resp} readOnly aria-readonly="true" />
+          ) : nomesEquipe(db.config).length ? (
             <select value={resp} onChange={(e) => setResp(e.target.value)}>
               {!nomesEquipe(db.config).includes(resp) && <option value={resp}>{resp || 'Selecione'}</option>}
               {nomesEquipe(db.config).map((u) => <option key={u}>{u}</option>)}

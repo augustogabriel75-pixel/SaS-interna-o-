@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePode } from '../../auth';
 import { Droplets, StopCircle, Pencil, Check } from 'lucide-react';
 import type { Paciente } from '../../types';
 import { useStore } from '../../store';
@@ -10,6 +11,7 @@ import { gotasMin, fmtNum } from '../../utils/calc';
 export default function AbaFluido({ p }: { p: Paciente }) {
   const { atualizarPaciente } = useStore();
   const toast = useToast();
+  const pode = usePode();
   const [aba, setAba] = useState<'fluido' | 'kcl' | 'cri'>('fluido');
   const [editando, setEditando] = useState<string | null>(null);
   const [novaTaxa, setNovaTaxa] = useState('');
@@ -60,10 +62,10 @@ export default function AbaFluido({ p }: { p: Paciente }) {
                 <small className="muted">Início {fmtDataHora(f.inicio)} • há {tempoInternado(f.inicio)}{f.aditivos && ` • Aditivos: ${f.aditivos}`}</small>
                 {f.obs && <small className="rx-obs">{f.obs}</small>}
               </div>
-              <div className="rx-acoes">
+              {pode.fluido && <div className="rx-acoes">
                 <button className="btn-icone" title="Alterar taxa" onClick={() => { setEditando(f.id); setNovaTaxa(String(f.taxaMlH).replace('.', ',')); }}><Pencil size={17} /></button>
                 <button className="btn btn-sm btn-secundario" onClick={() => encerrar(f.id)}><StopCircle size={15} /> Encerrar</button>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
@@ -77,7 +79,7 @@ export default function AbaFluido({ p }: { p: Paciente }) {
         ]} />
         <div className="mt">
           {aba === 'fluido' && (
-            <CalcFluido peso={p.peso} especie={p.especie} onPrescrever={(f) => {
+            <CalcFluido peso={p.peso} especie={p.especie} onPrescrever={!pode.fluido ? undefined : (f) => {
               atualizarPaciente(p.id, (x) => {
                 x.fluidos.forEach((o) => { if (o.ativo) { o.ativo = false; o.encerradoEm = new Date().toISOString(); } });
                 x.fluidos.push({ id: uid(), ...f, aditivos: f.aditivos || undefined, obs: f.obs || undefined, inicio: new Date().toISOString(), ativo: true });

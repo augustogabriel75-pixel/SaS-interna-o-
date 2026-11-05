@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { NUVEM } from '../lib/supabase';
 import { Plus, Trash2, Download, Upload, RotateCcw, Minus } from 'lucide-react';
 import { useStore } from '../store';
 import { Campo, useToast, useConfirmar } from '../components/ui';
@@ -55,7 +56,7 @@ export default function Configuracoes() {
           <h2 className="cartao-titulo">Profissionais</h2>
           <p className="muted sem-margem">{c.equipe.filter((e) => e.ativo).length} profissional(is) ativo(s). Cadastro, CRMV e função ficam na aba Profissionais.</p>
         </div>
-        <a className="btn btn-secundario" href="#/equipe">Gerenciar profissionais</a>
+        <a className="btn btn-secundario" href={NUVEM ? '#/admin' : '#/equipe'}>Gerenciar profissionais</a>
       </section>
 
       <section className="cartao">
@@ -92,8 +93,8 @@ export default function Configuracoes() {
           <button className="btn btn-secundario" onClick={exportar}><Download size={16} /> Exportar backup</button>
           <button className="btn btn-secundario" onClick={() => arquivo.current?.click()}><Upload size={16} /> Restaurar backup</button>
           <input ref={arquivo} type="file" accept="application/json" hidden onChange={(e) => carregarArquivo(e.target.files?.[0])} />
-          <button className="btn btn-fantasma" onClick={async () => (await confirmar({ titulo: 'Recarregar dados de demonstração?', texto: 'Os dados atuais serão substituídos pelos pacientes de exemplo.', botao: 'Recarregar' })) && resetar(true)}><RotateCcw size={16} /> Dados de demonstração</button>
-          <button className="btn btn-perigo" onClick={async () => (await confirmar({ titulo: 'Apagar todos os dados?', texto: 'Pacientes, prescrições e registros serão apagados. Exporte um backup antes, se precisar.', botao: 'Apagar tudo', perigo: true })) && resetar(false)}><Trash2 size={16} /> Começar do zero</button>
+          {!NUVEM && <button className="btn btn-fantasma" onClick={async () => (await confirmar({ titulo: 'Recarregar dados de demonstração?', texto: 'Os dados atuais serão substituídos pelos pacientes de exemplo.', botao: 'Recarregar' })) && resetar(true)}><RotateCcw size={16} /> Dados de demonstração</button>}
+          {!NUVEM && <button className="btn btn-perigo" onClick={async () => (await confirmar({ titulo: 'Apagar todos os dados?', texto: 'Pacientes, prescrições e registros serão apagados. Exporte um backup antes, se precisar.', botao: 'Apagar tudo', perigo: true })) && resetar(false)}><Trash2 size={16} /> Começar do zero</button>}
         </div>
       </section>
     </div>

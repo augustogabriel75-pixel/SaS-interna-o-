@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePode } from '../../auth';
 import { Pencil, Send, Clock, Droplets, Activity, Stethoscope, AlertTriangle } from 'lucide-react';
 import type { Gravidade, Paciente } from '../../types';
 import { useStore } from '../../store';
@@ -13,6 +14,7 @@ import { ir } from '../../router';
 export default function AbaResumo({ p }: { p: Paciente }) {
   const { db, agora, atualizarPaciente } = useStore();
   const toast = useToast();
+  const pode = usePode();
   const [editDiag, setEditDiag] = useState(false);
   const [diags, setDiags] = useState(p.diagnosticos);
   const [diagObs, setDiagObs] = useState(p.diagnosticoObs ?? '');
@@ -38,7 +40,7 @@ export default function AbaResumo({ p }: { p: Paciente }) {
         {internado && (
           <div className="cartao">
             <h3 className="cartao-titulo">Situação</h3>
-            <div className="grade-form g2">
+            <fieldset className="grade-form g2 fieldset-limpo" disabled={!pode.editarPaciente}>
               <Campo rotulo="Estado clínico" span={2}>
                 <Chips<Gravidade> permitirLimpar={false} valor={p.gravidade} onChange={(v) => v && atualizarPaciente(p.id, (x) => { x.gravidade = v; })} opcoes={[
                   { v: 'estavel', r: 'Estável', tom: 'ok' }, { v: 'atencao', r: 'Atenção', tom: 'alerta' }, { v: 'critico', r: 'Crítico', tom: 'perigo' },
@@ -66,14 +68,14 @@ export default function AbaResumo({ p }: { p: Paciente }) {
                   <label className="check"><input type="checkbox" checked={!!p.isolamento} onChange={(e) => atualizarPaciente(p.id, (x) => { x.isolamento = e.target.checked; })} /> Isolamento</label>
                 </div>
               </Campo>
-            </div>
+            </fieldset>
           </div>
         )}
 
         <div className="cartao">
           <div className="secao-cab">
             <h3 className="cartao-titulo"><Stethoscope size={16} /> Diagnóstico</h3>
-            <button className="btn btn-sm btn-fantasma" onClick={() => { setDiags(p.diagnosticos); setDiagObs(p.diagnosticoObs ?? ''); setEditDiag(true); }}><Pencil size={14} /> Editar</button>
+            {pode.editarPaciente && <button className="btn btn-sm btn-fantasma" onClick={() => { setDiags(p.diagnosticos); setDiagObs(p.diagnosticoObs ?? ''); setEditDiag(true); }}><Pencil size={14} /> Editar</button>}
           </div>
           {p.diagnosticos.length ? <div className="diag-selecionados">{p.diagnosticos.map((d) => <span key={d} className="diag-sel">{d}</span>)}</div> : <p className="muted">Sem diagnóstico definido.</p>}
           {p.diagnosticoObs && <p className="mt">{p.diagnosticoObs}</p>}

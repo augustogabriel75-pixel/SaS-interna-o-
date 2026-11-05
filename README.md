@@ -26,24 +26,29 @@ Sistema web para gestão da **ala de internação** de clínicas e hospitais vet
 npm install
 npm run dev        # desenvolvimento em http://localhost:5173
 npm run build      # gera a versão de produção em dist/
-npm run build:single  # gera um único arquivo dist-single/index.html (funciona offline)
+npm run build:single  # arquivo único de demonstração (dist-single/index.html)
 ```
 
-## Publicação
+## Versão em nuvem (login, níveis de acesso e modo sem internet)
 
-O workflow `.github/workflows/deploy.yml` publica automaticamente no **GitHub Pages** a cada push na `main`
-(ative em *Settings → Pages → Source: GitHub Actions*).
+Com as variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` configuradas, o sistema roda em nuvem:
 
-## Dados
+- **Login** por profissional (Supabase Auth), com “Esqueci minha senha”.
+- **Painel administrativo**: criar usuários, liberar/bloquear acesso, histórico de atividades (quem checou, prescreveu, deu alta) e backup.
+- **Níveis de acesso**: Administrador, Médico-veterinário e Auxiliar/Enfermagem. As regras valem também no banco (RLS + gatilhos em `supabase/schema.sql`), não só nas telas.
+- **Tempo real**: todos os computadores e celulares veem as mudanças na hora.
+- **Modo sem internet**: o app fica instalado no aparelho (PWA), os dados ficam numa cópia local (IndexedDB) e as alterações são enviadas sozinhas quando a conexão volta, com mesclagem automática quando duas pessoas mexem no mesmo paciente.
 
-Nesta versão os dados ficam salvos no navegador (localStorage) do computador/tablet usado. Use **Configurações → Exportar backup** regularmente.
-O acesso de vários computadores ao mesmo tempo (multiusuário, login e nuvem) exige um backend — a camada de dados está isolada em `src/store.tsx` para facilitar essa migração.
+Sem essas variáveis, o sistema roda em **modo demonstração**, com os dados só no navegador.
+
+👉 Passo a passo para publicar (Supabase + Netlify): **[COMO-PUBLICAR.md](COMO-PUBLICAR.md)**
 
 ## Estrutura
 
 ```
 src/
   data/        bulário (medicamentos) e diagnósticos
+  lib/         Supabase, mesclagem da sincronização, modo offline
   utils/       cálculos (dose, soro, KCl, CRI), boletim, impressão, formatação
   components/  modal, chips, calculadoras, checagem de dose, seletor de diagnóstico
   pages/       mapa, agenda, internação, pacientes, calculadoras, bulário, configurações

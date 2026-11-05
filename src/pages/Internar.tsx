@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { NUVEM } from '../lib/supabase';
 import { Save, Dog, Cat } from 'lucide-react';
 import { useStore, nomesVeterinarios } from '../store';
 import { Campo, Chips, useToast } from '../components/ui';
@@ -158,7 +159,7 @@ export default function Internar({ boxInicial, editarId }: { boxInicial?: string
                 {nomesVeterinarios(db.config).map((u) => <option key={u}>{u}</option>)}
               </select>
             ) : (
-              <a className="btn btn-secundario" href="#/equipe">Cadastrar veterinários</a>
+              <a className="btn btn-secundario" href={NUVEM ? '#/admin' : '#/equipe'}>Cadastrar veterinários</a>
             )}
           </Campo>
           <Campo rotulo="Estado clínico" span={2}>

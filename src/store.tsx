@@ -1,4 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
+import { NUVEM, supabase } from './lib/supabase';
+import { mesclar } from './lib/merge';
+import { useAuth, type Perfil } from './auth';
+import { useToast } from './components/ui';
 import type { Config, DB, Paciente, Prescricao, Profissional } from './types';
 import { uid } from './utils/format';
 import { buscarMedicamento } from './data/medicamentos';
@@ -198,6 +203,15 @@ function carregar(): DB {
   return novoDB(true);
 }
 
+export interface EstadoSync {
+  modo: 'local' | 'nuvem';
+  online: boolean;
+  pendentes: number;
+  sincronizando: boolean;
+  ultimaSync?: Date;
+  pronto: boolean;
+}
+
 interface Ctx {
   db: DB;
   atualizar: (fn: (d: DB) => void) => void;
@@ -206,13 +220,30 @@ interface Ctx {
   resetar: (comDemo: boolean) => void;
   importar: (db: DB) => void;
   agora: Date;
+  sync: EstadoSync;
+  sincronizar: () => Promise<void>;
+  carregarHistorico: () => Promise<number>;
 }
 
 const StoreCtx = createContext<Ctx | null>(null);
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const [db, setDb] = useState<DB>(carregar);
+function useRelogio() {
   const [agora, setAgora] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return agora;
+}
+
+export function StoreProvider({ children }: { children: ReactNode }) {
+  return NUVEM ? <StoreNuvem>{children}</StoreNuvem> : <StoreLocal>{children}</StoreLocal>;
+}
+
+// ═════════ Modo local (demonstração / sem Supabase): dados só neste navegador
+function StoreLocal({ children }: { children: ReactNode }) {
+  const [db, setDb] = useState<DB>(carregar);
+  const agora = useRelogio();
 
   useEffect(() => {
     try {
@@ -221,11 +252,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, [db]);
-
-  useEffect(() => {
-    const t = setInterval(() => setAgora(new Date()), 30_000);
-    return () => clearInterval(t);
-  }, []);
 
   const atualizar = useCallback((fn: (d: DB) => void) => {
     setDb((prev) => {
@@ -253,8 +279,322 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetar: (comDemo) => setDb(novoDB(comDemo)),
       importar: (d) => setDb(migrar(d)),
       agora,
+      sync: { modo: 'local', online: true, pendentes: 0, sincronizando: false, pronto: true },
+      sincronizar: async () => {},
+      carregarHistorico: async () => 0,
     }),
     [db, atualizar, atualizarPaciente, agora],
+  );
+
+  return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
+}
+
+// ═════════ Modo nuvem: Supabase + cópia no aparelho + fila para quando estiver sem internet
+interface LinhaPaciente { id: string; versao: number; dados: Paciente }
+interface Cache {
+  db: DB;
+  base: Record<string, { versao: number; dados: Paciente }>;
+  sujos: string[];
+  cfgBase?: { versao: number; dados: Config };
+  cfgSujo: boolean;
+}
+
+const DIAS_HISTORICO = 60;
+const semEquipe = (c: Config): Config => ({ ...c, equipe: [] });
+const json = (x: unknown) => JSON.stringify(x);
+
+function equipeDePerfis(perfis: Perfil[]): Profissional[] {
+  return perfis.map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    funcao: (Object.keys(FUNCOES).includes(p.funcao) ? p.funcao : 'outro') as Profissional['funcao'],
+    crmv: p.crmv ?? undefined,
+    especialidade: p.especialidade ?? undefined,
+    telefone: p.telefone ?? undefined,
+    email: p.email ?? undefined,
+    ativo: p.ativo,
+  }));
+}
+
+function ehErroDeRede(e: { message?: string } | null) {
+  return !!e && /fetch|network|Failed|Load failed|timeout/i.test(e.message ?? '');
+}
+
+function StoreNuvem({ children }: { children: ReactNode }) {
+  const { perfil } = useAuth();
+  const toast = useToast();
+  const agora = useRelogio();
+  const eu = perfil!;
+  const chaveCache = `vetclin:cache:${eu.id}`;
+
+  const [db, setDb] = useState<DB>(() => ({ versao: 2, config: structuredClone(CONFIG_PADRAO), pacientes: [], usuarioAtual: eu.nome }));
+  const dbRef = useRef(db);
+  const perfisRef = useRef<Perfil[]>([]);
+  const meta = useRef<{ base: Cache['base']; sujos: Set<string>; cfgBase?: Cache['cfgBase']; cfgSujo: boolean }>({ base: {}, sujos: new Set(), cfgSujo: false });
+  const enviando = useRef(false);
+  const [sync, setSync] = useState<EstadoSync>({ modo: 'nuvem', online: navigator.onLine, pendentes: 0, sincronizando: false, pronto: false });
+
+  const atualizarContador = useCallback(() => {
+    const n = meta.current.sujos.size + (meta.current.cfgSujo ? 1 : 0);
+    setSync((s) => (s.pendentes === n ? s : { ...s, pendentes: n }));
+  }, []);
+
+  const timerCache = useRef<number | undefined>(undefined);
+  const salvarCache = useCallback(() => {
+    clearTimeout(timerCache.current);
+    timerCache.current = window.setTimeout(() => {
+      const c: Cache = { db: dbRef.current, base: meta.current.base, sujos: [...meta.current.sujos], cfgBase: meta.current.cfgBase, cfgSujo: meta.current.cfgSujo };
+      idbSet(chaveCache, c).catch(() => {});
+    }, 300);
+  }, [chaveCache]);
+
+  const definir = useCallback((next: DB) => {
+    next.usuarioAtual = eu.nome;
+    if (perfisRef.current.length) next.config.equipe = equipeDePerfis(perfisRef.current);
+    dbRef.current = next;
+    setDb(next);
+    salvarCache();
+    atualizarContador();
+  }, [eu.nome, salvarCache, atualizarContador]);
+
+  const substituirPaciente = useCallback((pac: Paciente) => {
+    const next = { ...dbRef.current, pacientes: [...dbRef.current.pacientes] };
+    const i = next.pacientes.findIndex((x) => x.id === pac.id);
+    if (i >= 0) next.pacientes[i] = pac;
+    else next.pacientes.push(pac);
+    definir(next);
+  }, [definir]);
+
+  const receberPaciente = useCallback((linha: LinhaPaciente) => {
+    const m = meta.current;
+    const base = m.base[linha.id];
+    if (base && base.versao >= linha.versao) return; // já conhecido (ex.: eco da própria gravação)
+    const local = dbRef.current.pacientes.find((x) => x.id === linha.id);
+    m.base[linha.id] = { versao: linha.versao, dados: linha.dados };
+    if (m.sujos.has(linha.id) && local) substituirPaciente(mesclar(base?.dados, local, linha.dados));
+    else substituirPaciente(linha.dados);
+  }, [substituirPaciente]);
+
+  const receberConfig = useCallback((linha: { versao: number; dados: Config }) => {
+    const m = meta.current;
+    if (m.cfgBase && m.cfgBase.versao >= linha.versao) return;
+    const local = semEquipe(dbRef.current.config);
+    const base = m.cfgBase?.dados;
+    m.cfgBase = { versao: linha.versao, dados: linha.dados };
+    const cfg = m.cfgSujo ? mesclar(base, local, semEquipe(linha.dados)) : { ...structuredClone(CONFIG_PADRAO), ...linha.dados };
+    definir({ ...dbRef.current, config: cfg });
+  }, [definir]);
+
+  const buscarPerfis = useCallback(async () => {
+    const { data, error } = await supabase.from('perfis').select('*').order('nome');
+    if (error || !data) return;
+    perfisRef.current = data as Perfil[];
+    definir({ ...dbRef.current, config: { ...dbRef.current.config } });
+  }, [definir]);
+
+  // ── envio das alterações pendentes
+  const enviar = useCallback(async () => {
+    if (enviando.current || !navigator.onLine) return;
+    enviando.current = true;
+    setSync((s) => ({ ...s, sincronizando: true }));
+    const m = meta.current;
+    try {
+      for (const id of [...m.sujos]) {
+        for (let tentativa = 0; tentativa < 4; tentativa++) {
+          const local = dbRef.current.pacientes.find((x) => x.id === id);
+          if (!local) { m.sujos.delete(id); break; }
+          const base = m.base[id];
+          const r = base
+            ? await supabase.from('pacientes').update({ dados: local }).eq('id', id).eq('versao', base.versao).select('id, versao, dados').maybeSingle()
+            : await supabase.from('pacientes').insert({ id, dados: local }).select('id, versao, dados').maybeSingle();
+          if (r.error && ehErroDeRede(r.error)) return;
+          const conflito = (r.error && r.error.code === '23505') || (!r.error && !r.data);
+          if (conflito) {
+            const rem = await supabase.from('pacientes').select('id, versao, dados').eq('id', id).maybeSingle();
+            if (rem.error) return;
+            if (rem.data) {
+              const merged = mesclar(base?.dados, local, (rem.data as LinhaPaciente).dados);
+              m.base[id] = { versao: rem.data.versao, dados: (rem.data as LinhaPaciente).dados };
+              substituirPaciente(merged);
+            } else {
+              delete m.base[id];
+            }
+            continue;
+          }
+          if (r.error) {
+            // sem permissão (ex.: auxiliar tentando prescrever): desfaz a alteração local
+            toast(r.error.message.includes('Auxiliar') ? r.error.message : `Não foi possível salvar ${local.nome}: ${r.error.message}`, 'erro');
+            if (base) substituirPaciente(base.dados);
+            else definir({ ...dbRef.current, pacientes: dbRef.current.pacientes.filter((x) => x.id !== id) });
+            m.sujos.delete(id);
+            break;
+          }
+          const salvo = r.data as LinhaPaciente;
+          m.base[id] = { versao: salvo.versao, dados: local };
+          const atual = dbRef.current.pacientes.find((x) => x.id === id);
+          if (json(atual) === json(local)) m.sujos.delete(id);
+          break;
+        }
+      }
+      if (m.cfgSujo) {
+        const local = semEquipe(dbRef.current.config);
+        const r = m.cfgBase
+          ? await supabase.from('config').update({ dados: local }).eq('id', 1).eq('versao', m.cfgBase.versao).select('versao').maybeSingle()
+          : await supabase.from('config').upsert({ id: 1, dados: local }).select('versao').maybeSingle();
+        if (r.error && ehErroDeRede(r.error)) return;
+        if (r.error) {
+          toast(`Configurações não salvas: ${r.error.message}`, 'erro');
+          if (m.cfgBase) definir({ ...dbRef.current, config: m.cfgBase.dados });
+          m.cfgSujo = false;
+        } else if (!r.data) {
+          const rem = await supabase.from('config').select('versao, dados').eq('id', 1).maybeSingle();
+          if (rem.data) {
+            const merged = mesclar(m.cfgBase?.dados, local, rem.data.dados as Config);
+            m.cfgBase = { versao: rem.data.versao, dados: rem.data.dados as Config };
+            definir({ ...dbRef.current, config: merged });
+          }
+        } else {
+          m.cfgBase = { versao: r.data.versao, dados: local };
+          if (json(semEquipe(dbRef.current.config)) === json(local)) m.cfgSujo = false;
+        }
+      }
+      setSync((s) => ({ ...s, ultimaSync: new Date() }));
+    } finally {
+      enviando.current = false;
+      salvarCache();
+      atualizarContador();
+      setSync((s) => ({ ...s, sincronizando: false }));
+      if (navigator.onLine && (m.sujos.size || m.cfgSujo)) setTimeout(() => { if (!enviando.current) enviar(); }, 3000);
+    }
+  }, [definir, substituirPaciente, salvarCache, atualizarContador, toast]);
+
+  const timerEnvio = useRef<number | undefined>(undefined);
+  const agendarEnvio = useCallback(() => {
+    clearTimeout(timerEnvio.current);
+    timerEnvio.current = window.setTimeout(() => enviar(), 400);
+  }, [enviar]);
+
+  // ── download dos dados do servidor
+  const puxar = useCallback(async () => {
+    if (!navigator.onLine) return;
+    const desde = new Date(Date.now() - DIAS_HISTORICO * 86400_000).toISOString();
+    const [cfg, pac] = await Promise.all([
+      supabase.from('config').select('versao, dados').eq('id', 1).maybeSingle(),
+      supabase.from('pacientes').select('id, versao, dados').or(`status.eq.internado,atualizado_em.gte.${desde}`),
+      buscarPerfis(),
+    ]);
+    if (cfg.data) receberConfig(cfg.data as { versao: number; dados: Config });
+    else if (!cfg.error && eu.papel === 'admin' && !meta.current.cfgBase) {
+      meta.current.cfgSujo = true; // primeira vez: grava a configuração padrão da clínica
+    }
+    if (pac.data) (pac.data as LinhaPaciente[]).forEach(receberPaciente);
+    setSync((s) => ({ ...s, ultimaSync: pac.error ? s.ultimaSync : new Date() }));
+  }, [buscarPerfis, receberConfig, receberPaciente, eu.papel]);
+
+  const sincronizar = useCallback(async () => {
+    await puxar();
+    await enviar();
+  }, [puxar, enviar]);
+
+  // ── inicialização: cópia do aparelho primeiro, depois servidor
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const c = await idbGet<Cache>(chaveCache);
+        if (c && vivo) {
+          meta.current = { base: c.base ?? {}, sujos: new Set(c.sujos ?? []), cfgBase: c.cfgBase, cfgSujo: !!c.cfgSujo };
+          definir(c.db);
+        }
+      } catch {
+        /* sem IndexedDB */
+      }
+      if (vivo) setSync((s) => ({ ...s, pronto: true }));
+      if (vivo) await sincronizar();
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveCache]);
+
+  // ── tempo real + conexão
+  useEffect(() => {
+    const canal = supabase
+      .channel('dados-clinica')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pacientes' }, (p) => {
+        if (p.new && (p.new as LinhaPaciente).dados) receberPaciente(p.new as LinhaPaciente);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'config' }, (p) => {
+        if (p.new && (p.new as { dados?: Config }).dados) receberConfig(p.new as { versao: number; dados: Config });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'perfis' }, () => buscarPerfis())
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') puxar();
+      });
+    const online = () => { setSync((s) => ({ ...s, online: true })); sincronizar(); };
+    const offline = () => setSync((s) => ({ ...s, online: false }));
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    const t = setInterval(() => { if (navigator.onLine) enviar(); }, 60_000);
+    return () => {
+      supabase.removeChannel(canal);
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+      clearInterval(t);
+    };
+  }, [receberPaciente, receberConfig, buscarPerfis, puxar, sincronizar, enviar]);
+
+  const atualizar = useCallback((fn: (d: DB) => void) => {
+    const prev = dbRef.current;
+    const next = structuredClone(prev);
+    fn(next);
+    const antes = new Map(prev.pacientes.map((p) => [p.id, p]));
+    for (const p of next.pacientes) {
+      const a = antes.get(p.id);
+      if (!a || json(a) !== json(p)) meta.current.sujos.add(p.id);
+    }
+    if (json(semEquipe(prev.config)) !== json(semEquipe(next.config))) meta.current.cfgSujo = true;
+    definir(next);
+    agendarEnvio();
+  }, [definir, agendarEnvio]);
+
+  const atualizarPaciente = useCallback(
+    (id: string, fn: (p: Paciente) => void) =>
+      atualizar((d) => {
+        const p = d.pacientes.find((x) => x.id === id);
+        if (p) fn(p);
+      }),
+    [atualizar],
+  );
+
+  const carregarHistorico = useCallback(async () => {
+    const { data, error } = await supabase.from('pacientes').select('id, versao, dados');
+    if (error) throw new Error(error.message);
+    (data as LinhaPaciente[]).forEach(receberPaciente);
+    return data.length;
+  }, [receberPaciente]);
+
+  const value = useMemo<Ctx>(
+    () => ({
+      db,
+      atualizar,
+      atualizarPaciente,
+      paciente: (id) => db.pacientes.find((p) => p.id === id),
+      resetar: () => toast('Na versão em nuvem os dados não podem ser apagados por aqui', 'erro'),
+      importar: (d) => atualizar((x) => {
+        const m = migrar(structuredClone(d));
+        for (const p of m.pacientes) {
+          const i = x.pacientes.findIndex((y) => y.id === p.id);
+          if (i >= 0) x.pacientes[i] = p;
+          else x.pacientes.push(p);
+        }
+        x.config = { ...m.config, equipe: x.config.equipe };
+      }),
+      agora,
+      sync,
+      sincronizar,
+      carregarHistorico,
+    }),
+    [db, atualizar, atualizarPaciente, agora, sync, sincronizar, carregarHistorico, toast],
   );
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;

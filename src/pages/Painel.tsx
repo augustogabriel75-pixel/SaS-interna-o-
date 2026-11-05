@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { usePode } from '../auth';
+import { NUVEM } from '../lib/supabase';
 import { UserPlus, AlertTriangle, BedDouble, Clock, LogOut, Plus, ShieldAlert, Activity, Cat, Dog, Droplets, Search } from 'lucide-react';
 import { useStore } from '../store';
 import { dosesPaciente, type DoseAgendada } from '../utils/calc';
@@ -19,6 +21,7 @@ export function IconeEspecie({ especie, size = 18 }: { especie: string; size?: n
 
 export default function Painel() {
   const { db, agora } = useStore();
+  const pode = usePode();
   const [busca, setBusca] = useState('');
   const internados = db.pacientes.filter((p) => p.status === 'internado');
 
@@ -56,11 +59,11 @@ export default function Painel() {
             <Search size={16} />
             <input placeholder="Buscar paciente, tutor, diagnóstico..." value={busca} onChange={(e) => setBusca(e.target.value)} />
           </div>
-          <button className="btn btn-primario" onClick={() => ir('/internar')}><Plus size={18} /> Internar paciente</button>
+          {pode.internar && <button className="btn btn-primario" onClick={() => ir('/internar')}><Plus size={18} /> Internar paciente</button>}
         </div>
       </div>
 
-      {db.config.equipe.length === 0 && (
+      {!NUVEM && db.config.equipe.length === 0 && (
         <div className="alerta-box info">
           <UserPlus size={16} />
           <span className="flex1">Cadastre os profissionais da clínica para registrar quem prescreveu, aplicou e assinou cada documento.</span>
@@ -100,10 +103,10 @@ export default function Painel() {
                 if (busca && !filtro(p)) return null;
                 if (!p) {
                   return (
-                    <button key={b.id} className="box box-livre" onClick={() => ir(`/internar?box=${b.id}`)}>
+                    <button key={b.id} className="box box-livre" disabled={!pode.internar} onClick={() => ir(`/internar?box=${b.id}`)}>
                       <span className="box-nome">{b.nome}</span>
                       <Plus size={22} />
-                      <span>Livre — internar</span>
+                      <span>{pode.internar ? 'Livre — internar' : 'Livre'}</span>
                     </button>
                   );
                 }

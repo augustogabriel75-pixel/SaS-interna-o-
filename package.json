@@ -10,6 +10,8 @@
     "build:single": "tsc -b && vite build -c vite.single.config.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "idb-keyval": "^6.3.0",
     "lucide-react": "^1.68.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
@@ -20,6 +22,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "typescript": "5.7",
     "vite": "^6.4.5",
+    "vite-plugin-pwa": "^0.21.2",
     "vite-plugin-singlefile": "^2.3.4"
   }
 }
