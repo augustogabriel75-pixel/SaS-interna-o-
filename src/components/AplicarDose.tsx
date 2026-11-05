@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Undo2, XCircle } from 'lucide-react';
 import { Modal, Campo, Badge, useToast } from './ui';
-import { useStore } from '../store';
+import { useStore, nomesEquipe } from '../store';
 import type { DoseAgendada } from '../utils/calc';
 import { textoQuantidade, fmtNum, unidadeAtivo } from '../utils/calc';
 import { fmtDataHora, toLocalInput, fromLocalInput, uid } from '../utils/format';
@@ -38,6 +38,10 @@ export default function AplicarDose({ dose, onFechar }: { dose: DoseAgendada | n
   const st = STATUS_DOSE[dose.status];
 
   const registrar = (status: 'aplicado' | 'nao_aplicado') => {
+    if (!resp.trim()) {
+      toast('Informe quem aplicou (cadastre a equipe em Profissionais)', 'erro');
+      return;
+    }
     if (status === 'nao_aplicado' && !obs.trim()) {
       toast('Informe o motivo da não aplicação', 'erro');
       return;
@@ -92,9 +96,14 @@ export default function AplicarDose({ dose, onFechar }: { dose: DoseAgendada | n
           <input type="datetime-local" value={quando} onChange={(e) => setQuando(e.target.value)} />
         </Campo>
         <Campo rotulo="Responsável">
-          <select value={resp} onChange={(e) => setResp(e.target.value)}>
-            {db.config.equipe.map((u) => <option key={u}>{u}</option>)}
-          </select>
+          {nomesEquipe(db.config).length ? (
+            <select value={resp} onChange={(e) => setResp(e.target.value)}>
+              {!nomesEquipe(db.config).includes(resp) && <option value={resp}>{resp || 'Selecione'}</option>}
+              {nomesEquipe(db.config).map((u) => <option key={u}>{u}</option>)}
+            </select>
+          ) : (
+            <input value={resp} onChange={(e) => setResp(e.target.value)} placeholder="Nome de quem aplicou" />
+          )}
         </Campo>
         <Campo rotulo="Observação / motivo" span={2}>
           <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: paciente vomitou após, aplicado com atraso, recusou VO..." />

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LogOut, Printer, RotateCcw, Wand2, MessageCircle } from 'lucide-react';
 import type { Paciente, StatusInternacao } from '../../types';
-import { useStore, nomeBox } from '../../store';
+import { useStore, nomeBox, assinatura } from '../../store';
 import { Campo, Chips, useToast, useConfirmar, PODE_IMPRIMIR } from '../../components/ui';
 import { fmtData, fmtDataHora, toLocalInput, fromLocalInput, toDateInput, especieRotulo, sexoRotulo, diasInternado, linkWhatsApp } from '../../utils/format';
 import { rotuloFrequencia } from '../../data/medicamentos';
@@ -60,7 +60,7 @@ export default function AbaAlta({ p }: { p: Paciente }) {
       ${f.receita ? `<h3>Prescrição para casa</h3><div>${textoParaHtml(f.receita)}</div>` : ''}
       ${f.orientacoes ? `<h3>Orientações</h3><div>${textoParaHtml(f.orientacoes)}</div>` : ''}
       ${f.tipo === 'alta' && f.retorno ? `<h3>Retorno</h3><div>${fmtData(f.retorno + 'T12:00')}</div>` : ''}
-      <div class="assin"><div>${p.veterinario}<br>${db.config.crmv}</div></div>`;
+      <div class="assin"><div>${assinatura(db.config, p.veterinario).replace(' — ', '<br>')}</div></div>`;
   };
 
   const imprimir = () => imprimirDocumento(`Alta — ${p.nome}`, sumarioHtml(), db.config);

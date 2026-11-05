@@ -1,6 +1,7 @@
 import type { Config, Paciente, Registro } from '../types';
 import { fmtData, fmtDataHora, especieRotulo, diasInternado } from './format';
 import { fmtNum, REFERENCIAS } from './calc';
+import { assinatura } from '../store';
 
 export interface OpcoesBoletim {
   periodoHoras: number;
@@ -180,7 +181,7 @@ export function gerarBoletim(p: Paciente, cfg: Config, o: OpcoesBoletim, agora =
 
   linhas.push(`Seguimos acompanhando ${o_a} ${p.nome} de perto e informaremos qualquer mudança. Estamos à disposição para dúvidas. ${ele === 'ele' ? '💙' : '💜'}`);
   linhas.push('');
-  linhas.push(`_${p.veterinario}${cfg.crmv ? ' — ' + cfg.crmv : ''}_`);
+  if (p.veterinario) linhas.push(`_${assinatura(cfg, p.veterinario)}_`);
   linhas.push(`_${cfg.clinica}${cfg.telefone ? ' • ' + cfg.telefone : ''}_`);
   return linhas.join('\n');
 }

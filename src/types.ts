@@ -170,12 +170,25 @@ export interface Box {
   nome: string;
 }
 
+export type Funcao = 'veterinario' | 'enfermeiro' | 'auxiliar' | 'estagiario' | 'recepcao' | 'outro';
+
+export interface Profissional {
+  id: string;
+  nome: string;
+  funcao: Funcao;
+  crmv?: string;
+  especialidade?: string;
+  telefone?: string;
+  email?: string;
+  ativo: boolean;
+}
+
 export interface Config {
   clinica: string;
   telefone: string;
   endereco: string;
   crmv: string;
-  equipe: string[];
+  equipe: Profissional[];
   alas: Ala[];
 }
 

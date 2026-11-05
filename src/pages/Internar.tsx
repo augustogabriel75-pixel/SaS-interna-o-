@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Save, Dog, Cat } from 'lucide-react';
-import { useStore } from '../store';
+import { useStore, nomesVeterinarios } from '../store';
 import { Campo, Chips, useToast } from '../components/ui';
 import SeletorDiagnostico from '../components/SeletorDiagnostico';
 import { RACAS_CAES, RACAS_GATOS } from '../data/diagnosticos';
@@ -38,7 +38,7 @@ export default function Internar({ boxInicial, editarId }: { boxInicial?: string
     diagnosticoObs: existente?.diagnosticoObs ?? '',
     alergias: existente?.alergias ?? '',
     gravidade: (existente?.gravidade ?? 'estavel') as Gravidade,
-    veterinario: existente?.veterinario ?? db.usuarioAtual,
+    veterinario: existente?.veterinario ?? (nomesVeterinarios(db.config).includes(db.usuarioAtual) ? db.usuarioAtual : nomesVeterinarios(db.config)[0] ?? ''),
     jejum: existente?.jejum ?? false,
     isolamento: existente?.isolamento ?? false,
     alertas: existente?.alertas ?? '',
@@ -152,9 +152,14 @@ export default function Internar({ boxInicial, editarId }: { boxInicial?: string
           <Campo rotulo="Data/hora de entrada"><input type="datetime-local" value={f.entrada} onChange={(e) => set('entrada', e.target.value)} /></Campo>
           <Campo rotulo="Alta prevista"><input type="date" value={f.altaPrevista} onChange={(e) => set('altaPrevista', e.target.value)} /></Campo>
           <Campo rotulo="Médico-veterinário responsável">
-            <select value={f.veterinario} onChange={(e) => set('veterinario', e.target.value)}>
-              {db.config.equipe.map((u) => <option key={u}>{u}</option>)}
-            </select>
+            {nomesVeterinarios(db.config).length ? (
+              <select value={f.veterinario} onChange={(e) => set('veterinario', e.target.value)}>
+                {!nomesVeterinarios(db.config).includes(f.veterinario) && <option value={f.veterinario}>{f.veterinario || 'Selecione'}</option>}
+                {nomesVeterinarios(db.config).map((u) => <option key={u}>{u}</option>)}
+              </select>
+            ) : (
+              <a className="btn btn-secundario" href="#/equipe">Cadastrar veterinários</a>
+            )}
           </Campo>
           <Campo rotulo="Estado clínico" span={2}>
             <Chips<Gravidade> permitirLimpar={false} valor={f.gravidade} onChange={(v) => v && set('gravidade', v)} opcoes={[

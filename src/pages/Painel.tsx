@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, BedDouble, Clock, LogOut, Plus, ShieldAlert, Activity, Cat, Dog, Droplets, Search } from 'lucide-react';
+import { UserPlus, AlertTriangle, BedDouble, Clock, LogOut, Plus, ShieldAlert, Activity, Cat, Dog, Droplets, Search } from 'lucide-react';
 import { useStore } from '../store';
 import { dosesPaciente, type DoseAgendada } from '../utils/calc';
 import { fmtHora, relativo, tempoInternado, inicioDoDia, fimDoDia } from '../utils/format';
@@ -59,6 +59,14 @@ export default function Painel() {
           <button className="btn btn-primario" onClick={() => ir('/internar')}><Plus size={18} /> Internar paciente</button>
         </div>
       </div>
+
+      {db.config.equipe.length === 0 && (
+        <div className="alerta-box info">
+          <UserPlus size={16} />
+          <span className="flex1">Cadastre os profissionais da clínica para registrar quem prescreveu, aplicou e assinou cada documento.</span>
+          <a className="btn btn-sm btn-primario" href="#/equipe">Adicionar profissionais</a>
+        </div>
+      )}
 
       <div className="stats">
         <Stat rotulo="Internados" valor={`${internados.length}/${totalBoxes}`} icone={<BedDouble />} tom="info" />

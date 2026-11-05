@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Plus, Trash2, Download, Upload, RotateCcw, Minus } from 'lucide-react';
 import { useStore } from '../store';
 import { Campo, useToast, useConfirmar } from '../components/ui';
@@ -9,7 +9,6 @@ export default function Configuracoes() {
   const { db, atualizar, resetar, importar } = useStore();
   const toast = useToast();
   const confirmar = useConfirmar();
-  const [novo, setNovo] = useState('');
   const arquivo = useRef<HTMLInputElement>(null);
   const c = db.config;
   const ocupados = new Set(db.pacientes.filter((p) => p.status === 'internado').map((p) => p.boxId));
@@ -39,7 +38,7 @@ export default function Configuracoes() {
 
   return (
     <div className="pagina">
-      <div className="pagina-cab"><div><h1>Configurações</h1><p className="sub">Dados da clínica, equipe e estrutura da internação</p></div></div>
+      <div className="pagina-cab"><div><h1>Configurações</h1><p className="sub">Dados da clínica e estrutura da internação</p></div></div>
 
       <section className="cartao">
         <h2 className="cartao-titulo">Clínica</h2>
@@ -47,24 +46,16 @@ export default function Configuracoes() {
           <Campo rotulo="Nome da clínica / hospital"><input value={c.clinica} onChange={(e) => atualizar((d) => { d.config.clinica = e.target.value; })} /></Campo>
           <Campo rotulo="Telefone / WhatsApp"><input value={c.telefone} onChange={(e) => atualizar((d) => { d.config.telefone = e.target.value; })} /></Campo>
           <Campo rotulo="Endereço"><input value={c.endereco} onChange={(e) => atualizar((d) => { d.config.endereco = e.target.value; })} /></Campo>
-          <Campo rotulo="CRMV (assinatura dos documentos)"><input value={c.crmv} onChange={(e) => atualizar((d) => { d.config.crmv = e.target.value; })} /></Campo>
+          <Campo rotulo="CRMV do responsável técnico" dica="Usado quando o veterinário não tem CRMV cadastrado"><input value={c.crmv} onChange={(e) => atualizar((d) => { d.config.crmv = e.target.value; })} /></Campo>
         </div>
       </section>
 
-      <section className="cartao">
-        <h2 className="cartao-titulo">Equipe</h2>
-        <div className="lista-simples">
-          {c.equipe.map((u, i) => (
-            <div key={u + i} className="item-simples">
-              <input className="flex1" value={u} onChange={(e) => atualizar((d) => { d.config.equipe[i] = e.target.value; })} />
-              <button className="btn-icone perigo" disabled={c.equipe.length <= 1} onClick={() => atualizar((d) => { d.config.equipe.splice(i, 1); if (!d.config.equipe.includes(d.usuarioAtual)) d.usuarioAtual = d.config.equipe[0]; })}><Trash2 size={16} /></button>
-            </div>
-          ))}
+      <section className="cartao linha-equipe">
+        <div>
+          <h2 className="cartao-titulo">Profissionais</h2>
+          <p className="muted sem-margem">{c.equipe.filter((e) => e.ativo).length} profissional(is) ativo(s). Cadastro, CRMV e função ficam na aba Profissionais.</p>
         </div>
-        <div className="nota-nova mt">
-          <input value={novo} onChange={(e) => setNovo(e.target.value)} placeholder="Ex.: Dra. Fernanda Melo" onKeyDown={(e) => { if (e.key === 'Enter' && novo.trim()) { atualizar((d) => { d.config.equipe.push(novo.trim()); }); setNovo(''); } }} />
-          <button className="btn btn-primario" disabled={!novo.trim()} onClick={() => { atualizar((d) => { d.config.equipe.push(novo.trim()); }); setNovo(''); }}><Plus size={16} /> Adicionar</button>
-        </div>
+        <a className="btn btn-secundario" href="#/equipe">Gerenciar profissionais</a>
       </section>
 
       <section className="cartao">

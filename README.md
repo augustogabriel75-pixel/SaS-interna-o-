@@ -1,4 +1,4 @@
-# VetInterna — Sistema de Internação Veterinária
+# VetClin Internação — Sistema de Internação Veterinária
 
 Sistema web para gestão da **ala de internação** de clínicas e hospitais veterinários: mapa de boxes, prescrição com cálculo automático de dose, checagem de medicações por horário, monitoramento, calculadora de soro e boletim médico para o tutor.
 
@@ -15,7 +15,8 @@ Sistema web para gestão da **ala de internação** de clínicas e hospitais vet
 | **Soro / fluidoterapia** | Manutenção (AAHA ou mL/kg/dia), déficit por % de desidratação, perdas, mL/h, gotas/min (macro e micro), seg/gota, bolus de choque. Calculadora de **KCl** (tabela de Scott + limite 0,5 mEq/kg/h) e de **infusão contínua (CRI)**. |
 | **Boletim médico** | Gerado automaticamente com base nos registros (alimentação, água, vômito, urina, fezes, dor, parâmetros, tratamento em linguagem leiga, alta prevista). Editável, com envio direto pelo **WhatsApp**, copiar, imprimir/PDF e histórico. |
 | **Alta** | Alta, óbito ou transferência; receita para casa (copia medicações orais), orientações prontas, retorno, sumário de alta para impressão e envio ao tutor. Libera o box automaticamente. |
-| **Configurações** | Dados da clínica, equipe (plantonistas), alas e quantidade de boxes, backup/restauração. |
+| **Profissionais** | Cadastro da equipe (veterinários com CRMV, enfermeiros, auxiliares, estagiários, recepção), ativar/desativar e quem está de plantão. O CRMV do veterinário responsável assina o boletim e a alta. |
+| **Configurações** | Dados da clínica, alas e quantidade de boxes, backup/restauração. |
 
 > As doses do bulário são referências da literatura veterinária para apoio à decisão. A prescrição final é sempre responsabilidade do médico-veterinário.
 

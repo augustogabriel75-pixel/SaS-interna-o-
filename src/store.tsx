@@ -1,20 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Config, DB, Paciente, Prescricao } from './types';
+import type { Config, DB, Paciente, Prescricao, Profissional } from './types';
 import { uid } from './utils/format';
 import { buscarMedicamento } from './data/medicamentos';
 
 const CHAVE = 'vetinterna:db:v1';
+
+/** Nome usado nos registros dos pacientes de demonstração */
+const EXEMPLO = 'Equipe (exemplo)';
+const NOMES_TEMPORARIOS = ['Dra. Ana Souza', 'Dr. Carlos Lima', 'Enf. Juliana Reis', 'Aux. Pedro Santos'];
 
 function boxes(prefixo: string, n: number) {
   return Array.from({ length: n }, (_, i) => ({ id: `${prefixo}${i + 1}`, nome: `${prefixo}${String(i + 1).padStart(2, '0')}` }));
 }
 
 export const CONFIG_PADRAO: Config = {
-  clinica: 'Hospital Veterinário VetInterna',
-  telefone: '(11) 99999-0000',
-  endereco: 'Rua das Clínicas, 100 — Centro',
-  crmv: 'CRMV-SP 00000',
-  equipe: ['Dra. Ana Souza', 'Dr. Carlos Lima', 'Enf. Juliana Reis', 'Aux. Pedro Santos'],
+  clinica: 'VetClin Clínica Veterinária',
+  telefone: '(63) 9114-0858',
+  endereco: 'Porto Nacional – TO',
+  crmv: '',
+  equipe: [],
   alas: [
     { id: 'caes', nome: 'Internação Cães', cor: '#0ea5e9', boxes: boxes('C', 8) },
     { id: 'gatos', nome: 'Internação Gatos', cor: '#a855f7', boxes: boxes('G', 6) },
@@ -49,7 +53,7 @@ function rx(medId: string, _peso: number, especie: 'canina' | 'felina', inicioOf
     duracaoDias: 5,
     ativa: true,
     criadaEm: horaCheia(inicioOffsetH),
-    prescritor: 'Dra. Ana Souza',
+    prescritor: EXEMPLO,
     ...extra,
   };
 }
@@ -58,7 +62,7 @@ function demo(): Paciente[] {
   const base = (o: Partial<Paciente>): Paciente => ({
     id: uid(), nome: '', especie: 'canina', raca: 'SRD', sexo: 'macho', castrado: false, idade: '', peso: 10,
     tutor: { nome: '', telefone: '' }, boxId: null, dataEntrada: horaCheia(-24), queixa: '', diagnosticos: [],
-    gravidade: 'estavel', status: 'internado', veterinario: 'Dra. Ana Souza',
+    gravidade: 'estavel', status: 'internado', veterinario: EXEMPLO,
     prescricoes: [], aplicacoes: [], registros: [], fluidos: [], boletins: [], evolucoes: [], ...o,
   });
 
@@ -110,7 +114,7 @@ function demo(): Paciente[] {
     nome: 'Pipoca', especie: 'canina', raca: 'Shih-tzu', sexo: 'femea', castrado: true, idade: '9 anos', peso: 6.1,
     tutor: { nome: 'Cláudia Ramos', telefone: '(11) 95555-4444' }, boxId: 'C3',
     dataEntrada: horaCheia(-20), queixa: 'Secreção vaginal purulenta, poliúria/polidipsia. OVH terapêutica realizada.',
-    diagnosticos: ['Piometra', 'Pós-operatório de OVH'], gravidade: 'estavel', altaPrevista: horaCheia(20), veterinario: 'Dr. Carlos Lima',
+    diagnosticos: ['Piometra', 'Pós-operatório de OVH'], gravidade: 'estavel', altaPrevista: horaCheia(20), veterinario: EXEMPLO,
   });
   pipoca.prescricoes = [
     rx('cefalotina', pipoca.peso, 'canina', -18),
@@ -125,31 +129,60 @@ function demo(): Paciente[] {
     for (const pr of p.prescricoes) {
       const ini = new Date(pr.inicio).getTime();
       for (let t = ini; t < agora - 3600_000; t += pr.frequenciaHoras * 3600_000) {
-        p.aplicacoes.push({ id: uid(), prescricaoId: pr.id, horario: new Date(t).toISOString(), status: 'aplicado', realizadoEm: new Date(t + 5 * 60_000).toISOString(), responsavel: 'Enf. Juliana Reis' });
+        p.aplicacoes.push({ id: uid(), prescricaoId: pr.id, horario: new Date(t).toISOString(), status: 'aplicado', realizadoEm: new Date(t + 5 * 60_000).toISOString(), responsavel: EXEMPLO });
       }
     }
   }
 
   thor.registros = [
-    { id: uid(), dataHora: horaCheia(-20), responsavel: 'Enf. Juliana Reis', temperatura: 39.6, fc: 120, fr: 32, dor: 5, mucosas: 'normocoradas', consciencia: 'deprimido', alimentacao: 'jejum', agua: 'pouco', vomito: true, vomitoQtd: 2, urina: 'normal', fezes: 'ausente', tpc: 2 },
-    { id: uid(), dataHora: horaCheia(-8), responsavel: 'Enf. Juliana Reis', temperatura: 39.0, fc: 104, fr: 26, dor: 3, mucosas: 'normocoradas', consciencia: 'alerta', alimentacao: 'nao_ofertado', agua: 'bebeu', vomito: false, urina: 'normal', fezes: 'ausente', tpc: 2 },
-    { id: uid(), dataHora: horaCheia(-2), responsavel: 'Aux. Pedro Santos', temperatura: 38.6, fc: 96, fr: 24, dor: 2, mucosas: 'normocoradas', consciencia: 'alerta', alimentacao: 'comeu_parcial', agua: 'bebeu', vomito: false, urina: 'normal', fezes: 'pastosa', tpc: 1, obs: 'Aceitou dieta gastrointestinal pastosa em pequena quantidade.' },
+    { id: uid(), dataHora: horaCheia(-20), responsavel: EXEMPLO, temperatura: 39.6, fc: 120, fr: 32, dor: 5, mucosas: 'normocoradas', consciencia: 'deprimido', alimentacao: 'jejum', agua: 'pouco', vomito: true, vomitoQtd: 2, urina: 'normal', fezes: 'ausente', tpc: 2 },
+    { id: uid(), dataHora: horaCheia(-8), responsavel: EXEMPLO, temperatura: 39.0, fc: 104, fr: 26, dor: 3, mucosas: 'normocoradas', consciencia: 'alerta', alimentacao: 'nao_ofertado', agua: 'bebeu', vomito: false, urina: 'normal', fezes: 'ausente', tpc: 2 },
+    { id: uid(), dataHora: horaCheia(-2), responsavel: EXEMPLO, temperatura: 38.6, fc: 96, fr: 24, dor: 2, mucosas: 'normocoradas', consciencia: 'alerta', alimentacao: 'comeu_parcial', agua: 'bebeu', vomito: false, urina: 'normal', fezes: 'pastosa', tpc: 1, obs: 'Aceitou dieta gastrointestinal pastosa em pequena quantidade.' },
   ];
   luna.registros = [
-    { id: uid(), dataHora: horaCheia(-6), responsavel: 'Enf. Juliana Reis', temperatura: 37.6, fc: 190, fr: 36, dor: 2, mucosas: 'ictericas', consciencia: 'deprimido', alimentacao: 'forcada', agua: 'nao_bebeu', vomito: false, urina: 'normal', fezes: 'ausente', glicemia: 110 },
+    { id: uid(), dataHora: horaCheia(-6), responsavel: EXEMPLO, temperatura: 37.6, fc: 190, fr: 36, dor: 2, mucosas: 'ictericas', consciencia: 'deprimido', alimentacao: 'forcada', agua: 'nao_bebeu', vomito: false, urina: 'normal', fezes: 'ausente', glicemia: 110 },
   ];
   mel.registros = [
-    { id: uid(), dataHora: horaCheia(-4), responsavel: 'Enf. Juliana Reis', temperatura: 39.8, fc: 170, fr: 34, dor: 4, mucosas: 'hipocoradas', consciencia: 'deprimido', alimentacao: 'nao_comeu', agua: 'nao_bebeu', vomito: true, vomitoQtd: 1, diarreia: true, urina: 'normal', fezes: 'sanguinolenta', glicemia: 68, hidratacao: 'moderada' },
+    { id: uid(), dataHora: horaCheia(-4), responsavel: EXEMPLO, temperatura: 39.8, fc: 170, fr: 34, dor: 4, mucosas: 'hipocoradas', consciencia: 'deprimido', alimentacao: 'nao_comeu', agua: 'nao_bebeu', vomito: true, vomitoQtd: 1, diarreia: true, urina: 'normal', fezes: 'sanguinolenta', glicemia: 68, hidratacao: 'moderada' },
   ];
   pipoca.registros = [
-    { id: uid(), dataHora: horaCheia(-3), responsavel: 'Aux. Pedro Santos', temperatura: 38.4, fc: 110, fr: 22, dor: 1, mucosas: 'normocoradas', consciencia: 'alerta', alimentacao: 'comeu_tudo', agua: 'bebeu', vomito: false, urina: 'normal', fezes: 'normal', obs: 'Ferida cirúrgica limpa, sem secreção.' },
+    { id: uid(), dataHora: horaCheia(-3), responsavel: EXEMPLO, temperatura: 38.4, fc: 110, fr: 22, dor: 1, mucosas: 'normocoradas', consciencia: 'alerta', alimentacao: 'comeu_tudo', agua: 'bebeu', vomito: false, urina: 'normal', fezes: 'normal', obs: 'Ferida cirúrgica limpa, sem secreção.' },
   ];
-  thor.evolucoes = [{ id: uid(), dataHora: horaCheia(-8), autor: 'Dra. Ana Souza', texto: 'Paciente mais ativo, cessaram os vômitos. Lipase ainda elevada. Iniciar realimentação gradual com dieta low-fat.' }];
+  thor.evolucoes = [{ id: uid(), dataHora: horaCheia(-8), autor: EXEMPLO, texto: 'Paciente mais ativo, cessaram os vômitos. Lipase ainda elevada. Iniciar realimentação gradual com dieta low-fat.' }];
   return [thor, luna, mel, pipoca];
 }
 
 function novoDB(comDemo = true): DB {
-  return { versao: 1, config: CONFIG_PADRAO, pacientes: comDemo ? demo() : [], usuarioAtual: CONFIG_PADRAO.equipe[0] };
+  return { versao: 2, config: structuredClone(CONFIG_PADRAO), pacientes: comDemo ? demo() : [], usuarioAtual: '' };
+}
+
+/** Atualiza dados salvos por versões anteriores */
+export function migrar(db: DB): DB {
+  if ((db.versao ?? 1) < 2) {
+    const antigos = (db.config.equipe as unknown[]) ?? [];
+    db.config.equipe = antigos
+      .map((e) => (typeof e === 'string' ? e : (e as Profissional).nome))
+      .filter((n) => n && !NOMES_TEMPORARIOS.includes(n))
+      .map((nome) => ({ id: uid(), nome, funcao: 'veterinario' as const, ativo: true }));
+    const trocar = (n: string) => (NOMES_TEMPORARIOS.includes(n) ? EXEMPLO : n);
+    for (const p of db.pacientes) {
+      p.veterinario = trocar(p.veterinario);
+      p.prescricoes.forEach((r) => { if (r.prescritor) r.prescritor = trocar(r.prescritor); });
+      p.aplicacoes.forEach((a) => { a.responsavel = trocar(a.responsavel); });
+      p.registros.forEach((r) => { r.responsavel = trocar(r.responsavel); });
+      p.evolucoes.forEach((e) => { e.autor = trocar(e.autor); });
+      p.boletins.forEach((b) => { b.autor = trocar(b.autor); });
+    }
+    if (db.config.clinica === 'Hospital Veterinário VetInterna') db.config.clinica = CONFIG_PADRAO.clinica;
+    if (db.config.telefone === '(11) 99999-0000') db.config.telefone = CONFIG_PADRAO.telefone;
+    if (db.config.endereco === 'Rua das Clínicas, 100 — Centro') db.config.endereco = CONFIG_PADRAO.endereco;
+    if (db.config.crmv === 'CRMV-SP 00000') db.config.crmv = '';
+    if (NOMES_TEMPORARIOS.includes(db.usuarioAtual)) db.usuarioAtual = '';
+    db.versao = 2;
+  }
+  if (db.usuarioAtual && !db.config.equipe.some((e) => e.nome === db.usuarioAtual && e.ativo)) db.usuarioAtual = '';
+  if (!db.usuarioAtual) db.usuarioAtual = db.config.equipe.find((e) => e.ativo)?.nome ?? '';
+  return db;
 }
 
 function carregar(): DB {
@@ -157,7 +190,7 @@ function carregar(): DB {
     const raw = localStorage.getItem(CHAVE);
     if (raw) {
       const db = JSON.parse(raw) as DB;
-      if (db && db.config && Array.isArray(db.pacientes)) return db;
+      if (db && db.config && Array.isArray(db.pacientes)) return migrar(db);
     }
   } catch {
     /* armazenamento indisponível */
@@ -218,7 +251,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       atualizarPaciente,
       paciente: (id) => db.pacientes.find((p) => p.id === id),
       resetar: (comDemo) => setDb(novoDB(comDemo)),
-      importar: (d) => setDb(d),
+      importar: (d) => setDb(migrar(d)),
       agora,
     }),
     [db, atualizar, atualizarPaciente, agora],
@@ -244,4 +277,30 @@ export function nomeBox(cfg: Config, id: string | null) {
     if (b) return `${b.nome} · ${a.nome}`;
   }
   return id;
+}
+
+export const FUNCOES: Record<Profissional['funcao'], string> = {
+  veterinario: 'Médico(a)-veterinário(a)',
+  enfermeiro: 'Enfermeiro(a) / Técnico(a)',
+  auxiliar: 'Auxiliar veterinário(a)',
+  estagiario: 'Estagiário(a)',
+  recepcao: 'Recepção',
+  outro: 'Outro',
+};
+
+/** Nomes dos profissionais ativos (para selects de responsável) */
+export function nomesEquipe(cfg: Config) {
+  return cfg.equipe.filter((e) => e.ativo).map((e) => e.nome);
+}
+
+/** Veterinários ativos; se não houver, toda a equipe ativa */
+export function nomesVeterinarios(cfg: Config) {
+  const v = cfg.equipe.filter((e) => e.ativo && e.funcao === 'veterinario').map((e) => e.nome);
+  return v.length ? v : nomesEquipe(cfg);
+}
+
+/** Assinatura: nome + CRMV do profissional (ou do responsável técnico da clínica) */
+export function assinatura(cfg: Config, nome: string) {
+  const crmv = cfg.equipe.find((e) => e.nome === nome)?.crmv || cfg.crmv;
+  return crmv ? `${nome} — ${crmv}` : nome;
 }
