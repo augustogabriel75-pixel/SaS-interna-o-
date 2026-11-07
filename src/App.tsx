@@ -130,6 +130,7 @@ export default function App() {
           ) : (
             <a className="btn btn-sm btn-secundario" href="#/equipe" onClick={() => setMenuAberto(false)}>Cadastrar profissionais</a>
           )}
+          {!NUVEM && <small className="aviso-demo">Modo demonstração: sem login, dados só neste navegador</small>}
           <small>Plantão: {agora.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })} • {agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>
         </div>
       </aside>
