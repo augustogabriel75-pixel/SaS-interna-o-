@@ -1,19 +1,58 @@
-import type { Especie, Paciente, Prescricao, UnidadeDose } from '../types';
+import type { Especie, FormaFarmaceutica, Paciente, Prescricao, UnidadeDose } from '../types';
 
 /** Quantidade total do ativo (na mesma unidade do numerador da dose) */
 export function doseTotal(dose: number, peso: number) {
   return dose * peso;
 }
 
-/** Volume em mL ou nº de comprimidos */
-export function quantidadeAdministrar(p: Pick<Prescricao, 'dose' | 'unidadeDose' | 'concentracao'>, peso: number) {
-  if (p.unidadeDose === 'mL/kg') return p.dose * peso;
-  if (!p.concentracao) return 0;
-  return (p.dose * peso) / p.concentracao;
-}
+export const UNIDADES_DOSE: { u: UnidadeDose; r: string }[] = [
+  { u: 'mg/kg', r: 'mg/kg' },
+  { u: 'mcg/kg', r: 'mcg/kg' },
+  { u: 'UI/kg', r: 'UI/kg' },
+  { u: 'g/kg', r: 'g/kg' },
+  { u: 'mL/kg', r: 'mL/kg' },
+  { u: 'gota/kg', r: 'gotas/kg' },
+  { u: 'cp/kg', r: 'comprimidos/kg' },
+  { u: 'g/animal', r: 'g/animal (fixa)' },
+  { u: 'mL/animal', r: 'mL/animal (fixa)' },
+  { u: 'mg/animal', r: 'mg/animal (fixa)' },
+  { u: 'gota/animal', r: 'gotas/animal (fixa)' },
+  { u: 'cp/animal', r: 'comprimidos/animal (fixa)' },
+];
 
 export function unidadeAtivo(u: UnidadeDose) {
   return u.split('/')[0];
+}
+
+/** Dose fixa por animal (não depende do peso) */
+export const porAnimal = (u: UnidadeDose) => u.endsWith('/animal');
+
+/** A dose já está na unidade de administração (mL, gotas ou comprimidos), sem concentração */
+export const doseNaForma = (u: UnidadeDose) => ['mL', 'gota', 'cp'].includes(unidadeAtivo(u));
+
+export function formaDaUnidade(u: UnidadeDose): FormaFarmaceutica | null {
+  const a = unidadeAtivo(u);
+  return a === 'mL' ? 'mL' : a === 'gota' ? 'gota' : a === 'cp' ? 'comprimido' : null;
+}
+
+/** Quantidade total do ativo (ou de mL/gotas/comprimidos) para o paciente */
+export function totalDose(dose: number, u: UnidadeDose, peso: number) {
+  return porAnimal(u) ? dose : dose * peso;
+}
+
+/** Volume em mL, gramas, gotas ou nº de comprimidos */
+export function quantidadeAdministrar(p: Pick<Prescricao, 'dose' | 'unidadeDose' | 'concentracao'>, peso: number) {
+  const total = totalDose(p.dose, p.unidadeDose, peso);
+  if (doseNaForma(p.unidadeDose)) return total;
+  if (!p.concentracao) return 0;
+  return total / p.concentracao;
+}
+
+/** Texto da conta: "10 kg × 0,2 g/kg = 2 g" ou "dose fixa: 2 g por animal" */
+export function textoCalculo(dose: number, u: UnidadeDose, peso: number) {
+  const a = unidadeAtivo(u) === 'cp' ? 'comprimido(s)' : unidadeAtivo(u) === 'gota' ? 'gota(s)' : unidadeAtivo(u);
+  if (porAnimal(u)) return `dose fixa: ${fmtNum(dose, 3)} ${a} por animal`;
+  return `${fmtNum(peso)} kg × ${fmtNum(dose, 3)} ${u} = ${fmtNum(dose * peso, 3)} ${a}`;
 }
 
 export function arred(n: number, casas = 2) {
@@ -29,6 +68,8 @@ export function fmtNum(n: number, casas = 2) {
 export function textoQuantidade(p: Prescricao, peso: number) {
   const q = quantidadeAdministrar(p, peso);
   if (p.forma === 'mL') return `${fmtNum(q, 2)} mL`;
+  if (p.forma === 'g') return `${fmtNum(q, 2)} g`;
+  if (p.forma === 'gota') return `${Math.round(q)} gota${Math.round(q) === 1 ? '' : 's'}`;
   const fr = fracaoComprimido(q);
   return `${fr} ${p.forma}${q > 1 ? 's' : ''}`;
 }

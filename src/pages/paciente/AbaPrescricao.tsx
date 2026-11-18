@@ -5,7 +5,7 @@ import type { Paciente, Prescricao } from '../../types';
 import { useStore } from '../../store';
 import { Badge, Vazio, useToast, useConfirmar, PODE_IMPRIMIR } from '../../components/ui';
 import { rotuloFrequencia } from '../../data/medicamentos';
-import { textoQuantidade, fmtNum, unidadeAtivo, horariosPrescricao } from '../../utils/calc';
+import { textoQuantidade, fmtNum, unidadeAtivo, horariosPrescricao, textoCalculo, doseNaForma } from '../../utils/calc';
 import { fmtDataHora, fmtHora, uid } from '../../utils/format';
 import PrescricaoForm from './PrescricaoForm';
 
@@ -61,8 +61,8 @@ export default function AbaPrescricao({ p }: { p: Paciente }) {
             <span>{pr.seNecessario ? 'se necessário' : rotuloFrequencia(pr.frequenciaHoras)}</span>
           </div>
           <small className="muted">
-            {fmtNum(pr.dose, 3)} {pr.unidadeDose} ({fmtNum(pr.dose * p.peso, 2)} {unidadeAtivo(pr.unidadeDose)})
-            {pr.unidadeDose !== 'mL/kg' && ` • ${fmtNum(pr.concentracao, 3)} ${unidadeAtivo(pr.unidadeDose)}/${pr.forma}`}
+            {textoCalculo(pr.dose, pr.unidadeDose, p.peso)}
+            {!doseNaForma(pr.unidadeDose) && pr.forma !== 'g' && ` • ${fmtNum(pr.concentracao, 3)} ${unidadeAtivo(pr.unidadeDose)}/${pr.forma}`}
             {' • '}Início {fmtDataHora(pr.inicio)}{fim ? ` • até ${fmtDataHora(fim)}` : ' • contínuo'}
             {pr.prescritor && ` • ${pr.prescritor}`}
           </small>

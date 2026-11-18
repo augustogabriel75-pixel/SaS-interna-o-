@@ -5,6 +5,12 @@ export interface FaixaDose {
   max: number;
   padrao: number;
   freq: number; // horas
+  /** unidade própria desta espécie (ex.: gatos em dose fixa por animal) */
+  unidade?: UnidadeDose;
+  /** dose sugerida conforme o peso: usa a primeira faixa em que peso <= ateKg */
+  tabelaPeso?: { ateKg: number; dose: number }[];
+  /** quantidade máxima por administração (comprimidos, mL, g...) */
+  maxQtd?: number;
 }
 
 export interface Apresentacao {
@@ -25,6 +31,8 @@ export interface Medicamento {
   felina: FaixaDose | null;
   obs?: string;
   alertaFelino?: string;
+  /** cadastrado pela clínica no bulário */
+  daClinica?: boolean;
 }
 
 export type Classe =
@@ -42,6 +50,7 @@ export type Classe =
   | 'Suplemento / Eletrólito'
   | 'Endócrino'
   | 'Gastrointestinal'
+  | 'Probiótico / Suplemento oral'
   | 'Outros';
 
 export const CLASSES: Classe[] = [
@@ -59,11 +68,14 @@ export const CLASSES: Classe[] = [
   'Suplemento / Eletrólito',
   'Endócrino',
   'Gastrointestinal',
+  'Probiótico / Suplemento oral',
   'Outros',
 ];
 
 const ml = (rotulo: string, valor: number): Apresentacao => ({ rotulo, valor, forma: 'mL' });
 const cp = (rotulo: string, valor: number): Apresentacao => ({ rotulo, valor, forma: 'comprimido' });
+const gr = (rotulo: string): Apresentacao => ({ rotulo, valor: 1, forma: 'g' });
+const gt = (rotulo: string): Apresentacao => ({ rotulo, valor: 1, forma: 'gota' });
 const f = (min: number, max: number, padrao: number, freq: number): FaixaDose => ({ min, max, padrao, freq });
 
 /**
@@ -390,6 +402,45 @@ export const MEDICAMENTOS: Medicamento[] = [
     apresentacoes: [ml('Gotas 75 mg/mL', 75)],
     vias: ['VO'], canina: f(2, 5, 3, 8), felina: f(2, 5, 3, 8) },
 
+  // ───────── Probióticos e suplementos orais (doses fixas ou por porte, conforme bula)
+  { id: 'probiotico-vetnil', nome: 'Probiótico Vetnil', comerciais: 'Probiótico Vetnil® Cães e Gatos (seringa 14 g)', classe: 'Probiótico / Suplemento oral', unidade: 'g/animal',
+    apresentacoes: [gr('Pasta oral — seringa 14 g')],
+    vias: ['VO'], canina: f(1, 4, 2, 24), felina: f(1, 2, 2, 24),
+    obs: 'Bula: filhotes recém-nascidos de pequeno porte 1 g; adultos de pequeno porte 2 g. Animais maiores: ajustar conforme bula.' },
+  { id: 'organew-pasta', nome: 'Organew Pet Pasta', comerciais: 'Organew® Pet Pasta / Organew® Forte (Vetnil)', classe: 'Probiótico / Suplemento oral', unidade: 'g/kg',
+    apresentacoes: [gr('Pasta oral — bisnaga/seringa 12 g')],
+    vias: ['VO'], canina: f(0.2, 0.2, 0.2, 24), felina: { ...f(1, 1, 1, 24), unidade: 'g/animal' },
+    obs: 'Probiótico + prebiótico + aminoácidos. Cães: 2 g para cada 10 kg, SID. Gatos: 1 g por animal, SID. Aplicar direto na boca.' },
+  { id: 'biocanis', nome: 'Biocanis', comerciais: 'Biocanis® (Ourofino) — seringa 14 g', classe: 'Probiótico / Suplemento oral', unidade: 'g/animal',
+    apresentacoes: [gr('Pasta oral — seringa 14 g')],
+    vias: ['VO'], canina: f(2, 4, 4, 12), felina: f(2, 4, 4, 12),
+    obs: 'Bula: filhotes 2 g; adultos e parto 4 g. Pode repetir a cada 6–12 h se necessário.' },
+  { id: 'levuflora', nome: 'Levuflora', comerciais: 'Levuflora® Pré e Probiótico (Biovet)', classe: 'Probiótico / Suplemento oral', unidade: 'g/animal',
+    apresentacoes: [gr('Pasta oral — seringa')],
+    vias: ['VO'], canina: { ...f(1, 4, 2, 24), tabelaPeso: [{ ateKg: 10, dose: 2 }, { ateKg: 999, dose: 4 }] }, felina: f(1, 2, 2, 24),
+    obs: 'Cães pequenos e gatos: filhote 1 g, adulto 2 g. Cães médios e grandes: filhote 2 g, adulto 4 g.' },
+  { id: 'fortiflora', nome: 'FortiFlora', comerciais: 'Pro Plan® FortiFlora® (Purina) — sachê 1 g', classe: 'Probiótico / Suplemento oral', unidade: 'g/animal',
+    apresentacoes: [gr('Sachê 1 g (pó sobre o alimento)')],
+    vias: ['VO'], canina: f(1, 1, 1, 24), felina: f(1, 1, 1, 24),
+    obs: '1 sachê por dia sobre o alimento, independente do porte.' },
+  { id: 'apevitin-bc', nome: 'Apevitin BC (ciproeptadina + vitaminas)', comerciais: 'Apevitin® BC xarope (EMS) — uso humano', classe: 'Probiótico / Suplemento oral', unidade: 'mg/kg',
+    apresentacoes: [ml('Xarope — ciproeptadina 0,8 mg/mL (4 mg/5 mL)', 0.8)],
+    vias: ['VO'], canina: f(0.2, 0.2, 0.2, 12), felina: { ...f(1, 4, 2, 12), unidade: 'mg/animal' },
+    obs: 'Estimulante de apetite. Dose calculada pela ciproeptadina. Produto de uso humano (também contém vitaminas B1, B2, B6, nicotinamida e C). Pode causar sedação.',
+    alertaFelino: 'Gatos: 1–4 mg de ciproeptadina por gato a cada 12 h. Pode causar excitação ou agressividade e reduzir o limiar convulsivo.' },
+  { id: 'hemolitan-gotas', nome: 'Hemolitan Pet gotas', comerciais: 'Hemolitan® Pet solução oral (Vetnil) — 30/60 mL', classe: 'Probiótico / Suplemento oral', unidade: 'gota/kg',
+    apresentacoes: [gt('Solução oral — gotas')],
+    vias: ['VO'], canina: f(1, 1, 1, 24), felina: f(1, 1, 1, 24),
+    obs: 'Suplemento vitamínico-mineral (anemias, convalescença). 1 gota por kg ou 1 mL para cada 10 kg, SID.' },
+  { id: 'hemolitan-cp', nome: 'Hemolitan Pet comprimidos', comerciais: 'Hemolitan® Pet 30 comprimidos (Vetnil)', classe: 'Probiótico / Suplemento oral', unidade: 'cp/kg',
+    apresentacoes: [cp('Comprimido', 1)],
+    vias: ['VO'], canina: { ...f(0.2, 0.2, 0.2, 24), maxQtd: 8 }, felina: { ...f(0.2, 0.2, 0.2, 24), maxQtd: 8 },
+    obs: '1 comprimido para cada 5 kg, SID. Máximo 8 comprimidos por dia.' },
+  { id: 'hemolitan-gold', nome: 'Hemolitan Gold comprimidos', comerciais: 'Hemolitan® Gold 30 comprimidos (Vetnil)', classe: 'Probiótico / Suplemento oral', unidade: 'cp/kg',
+    apresentacoes: [cp('Comprimido', 1)],
+    vias: ['VO'], canina: f(0.1, 0.1, 0.1, 24), felina: f(0.1, 0.1, 0.1, 24),
+    obs: '1 comprimido para cada 10 kg, SID (pode dividir em 2 tomadas). Dose diferente do Hemolitan Pet.' },
+
   // ───────── Outros
   { id: 'ivermectina', nome: 'Ivermectina', comerciais: 'Ivomec®', classe: 'Outros', unidade: 'mcg/kg',
     apresentacoes: [ml('Injetável 10 mg/mL (10.000 mcg/mL)', 10000)],
@@ -397,8 +448,35 @@ export const MEDICAMENTOS: Medicamento[] = [
     obs: 'Contraindicado em raças com mutação MDR1 (Collie, Pastor Australiano, Sheltie...).' },
 ];
 
-export function buscarMedicamento(id?: string) {
-  return MEDICAMENTOS.find((m) => m.id === id);
+export function buscarMedicamento(id?: string, extras: Medicamento[] = []) {
+  return MEDICAMENTOS.find((m) => m.id === id) ?? extras.find((m) => m.id === id);
+}
+
+/** Bulário padrão + medicamentos cadastrados pela clínica */
+export function todosMedicamentos(extras: Medicamento[] = []) {
+  return [...MEDICAMENTOS, ...extras.map((m) => ({ ...m, daClinica: true }))];
+}
+
+export function faixaDe(m: Medicamento, especie: 'canina' | 'felina') {
+  return especie === 'canina' ? m.canina : m.felina;
+}
+
+/** Unidade de dose usada para a espécie */
+export function unidadeDe(m: Medicamento, especie: 'canina' | 'felina') {
+  return faixaDe(m, especie)?.unidade ?? m.unidade;
+}
+
+/** Dose sugerida para o peso (tabela por porte quando existir) */
+export function doseSugerida(fx: FaixaDose, peso: number) {
+  return fx.tabelaPeso?.find((t) => peso <= t.ateKg)?.dose ?? fx.padrao;
+}
+
+/** Texto da faixa: "1–2 mg/kg" */
+export function textoFaixa(m: Medicamento, especie: 'canina' | 'felina') {
+  const fx = faixaDe(m, especie);
+  if (!fx) return '';
+  const n = (x: number) => x.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  return `${n(fx.min)}${fx.max !== fx.min ? '–' + n(fx.max) : ''} ${unidadeDe(m, especie)}`;
 }
 
 export const VIAS: Via[] = ['IV', 'IM', 'SC', 'VO', 'Tópica', 'Oftálmica', 'Otológica', 'Retal', 'Inalatória', 'Transdérmica'];

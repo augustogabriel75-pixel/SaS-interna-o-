@@ -3,8 +3,11 @@ export type Sexo = 'macho' | 'femea';
 export type Gravidade = 'estavel' | 'atencao' | 'critico';
 export type StatusInternacao = 'internado' | 'alta' | 'obito' | 'transferido';
 
-export type UnidadeDose = 'mg/kg' | 'mcg/kg' | 'UI/kg' | 'mL/kg' | 'g/kg';
-export type FormaFarmaceutica = 'mL' | 'comprimido' | 'cápsula';
+/** Dose por kg de peso ou fixa por animal. Quando o numerador é mL, gota ou cp, a dose já está na unidade de administração. */
+export type UnidadeDose =
+  | 'mg/kg' | 'mcg/kg' | 'UI/kg' | 'g/kg' | 'mL/kg' | 'gota/kg' | 'cp/kg'
+  | 'mg/animal' | 'g/animal' | 'mL/animal' | 'gota/animal' | 'cp/animal';
+export type FormaFarmaceutica = 'mL' | 'comprimido' | 'cápsula' | 'g' | 'gota';
 
 export type Via = 'IV' | 'IM' | 'SC' | 'VO' | 'Tópica' | 'Oftálmica' | 'Otológica' | 'Retal' | 'Inalatória' | 'Transdérmica';
 
@@ -190,6 +193,8 @@ export interface Config {
   crmv: string;
   equipe: Profissional[];
   alas: Ala[];
+  /** Medicamentos cadastrados pela própria clínica (bulário da clínica) */
+  medicamentosClinica?: import('./data/medicamentos').Medicamento[];
 }
 
 export interface DB {

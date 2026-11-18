@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Search, Calculator, Info } from 'lucide-react';
 import { Modal, Campo, useToast } from '../../components/ui';
-import { MEDICAMENTOS, CLASSES, VIAS, FREQUENCIAS, type Medicamento } from '../../data/medicamentos';
-import { fmtNum, quantidadeAdministrar, textoQuantidade, horariosPrescricao, unidadeAtivo } from '../../utils/calc';
+import { todosMedicamentos, CLASSES, VIAS, FREQUENCIAS, faixaDe, unidadeDe, doseSugerida, textoFaixa, type Medicamento } from '../../data/medicamentos';
+import { fmtNum, quantidadeAdministrar, textoQuantidade, horariosPrescricao, unidadeAtivo, UNIDADES_DOSE, doseNaForma, formaDaUnidade, textoCalculo, porAnimal } from '../../utils/calc';
+import { usePode } from '../../auth';
 import { fmtHora, fmtData, toLocalInput, fromLocalInput, uid } from '../../utils/format';
 import { useStore } from '../../store';
 import type { FormaFarmaceutica, Paciente, Prescricao, UnidadeDose, Via } from '../../types';
@@ -15,12 +16,15 @@ function proximaHoraCheia() {
 }
 
 export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paciente: Paciente; editar?: Prescricao; onFechar: () => void }) {
-  const { db, atualizarPaciente } = useStore();
+  const { db, atualizar, atualizarPaciente } = useStore();
   const toast = useToast();
+  const pode = usePode();
+  const todos = useMemo(() => todosMedicamentos(db.config.medicamentosClinica), [db.config.medicamentosClinica]);
+  const [salvarNoBulario, setSalvarNoBulario] = useState(false);
   const [etapa, setEtapa] = useState<'escolher' | 'dose'>(editar ? 'dose' : 'escolher');
   const [busca, setBusca] = useState('');
   const [classe, setClasse] = useState<string>('');
-  const [med, setMed] = useState<Medicamento | undefined>(() => MEDICAMENTOS.find((m) => m.id === editar?.medicamentoId));
+  const [med, setMed] = useState<Medicamento | undefined>(() => todosMedicamentos(db.config.medicamentosClinica).find((m) => m.id === editar?.medicamentoId));
 
   const [f, setF] = useState(() => ({
     nome: editar?.nome ?? '',
@@ -41,21 +45,24 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
 
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return MEDICAMENTOS.filter((m) => (!classe || m.classe === classe) && (!q || `${m.nome} ${m.comerciais} ${m.classe}`.toLowerCase().includes(q)));
-  }, [busca, classe]);
+    return todos.filter((m) => (!classe || m.classe === classe) && (!q || `${m.nome} ${m.comerciais} ${m.classe}`.toLowerCase().includes(q)));
+  }, [busca, classe, todos]);
 
-  const faixa = med ? (p.especie === 'canina' ? med.canina : med.felina) : null;
+  const faixa = med ? faixaDe(med, p.especie) : null;
+  const unidadeRef = med ? unidadeDe(med, p.especie) : undefined;
 
   const escolher = (m: Medicamento) => {
-    const fx = p.especie === 'canina' ? m.canina : m.felina;
-    const ap = m.apresentacoes[0];
+    const fx = faixaDe(m, p.especie);
+    const u = unidadeDe(m, p.especie);
+    const formaU = formaDaUnidade(u);
+    const ap = (formaU && m.apresentacoes.find((a) => a.forma === formaU)) || m.apresentacoes[0];
     setMed(m);
     setF((x) => ({
       ...x,
       nome: m.nome,
       classe: m.classe,
-      dose: fx ? String(fx.padrao) : '',
-      unidadeDose: m.unidade,
+      dose: fx ? String(doseSugerida(fx, p.peso)) : '',
+      unidadeDose: u,
       concentracao: String(ap.valor),
       forma: ap.forma,
       via: m.vias[0],
@@ -73,19 +80,21 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
 
   const dose = parseFloat(String(f.dose).replace(',', '.')) || 0;
   const conc = parseFloat(String(f.concentracao).replace(',', '.')) || 0;
+  const naForma = doseNaForma(f.unidadeDose);
   const previa: Prescricao = {
-    id: editar?.id ?? 'previa', nome: f.nome, dose, unidadeDose: f.unidadeDose, concentracao: f.unidadeDose === 'mL/kg' ? 1 : conc,
-    forma: f.unidadeDose === 'mL/kg' ? 'mL' : f.forma, via: f.via, frequenciaHoras: f.frequenciaHoras, inicio: fromLocalInput(f.inicio),
+    id: editar?.id ?? 'previa', nome: f.nome, dose, unidadeDose: f.unidadeDose, concentracao: naForma ? 1 : conc,
+    forma: formaDaUnidade(f.unidadeDose) ?? f.forma, via: f.via, frequenciaHoras: f.frequenciaHoras, inicio: fromLocalInput(f.inicio),
     duracaoDias: f.duracaoDias, ativa: true, criadaEm: '', seNecessario: f.seNecessario,
   };
   const qtd = quantidadeAdministrar(previa, p.peso);
-  const fora = faixa && dose > 0 && (dose < faixa.min * 0.999 || dose > faixa.max * 1.001);
+  const fora = faixa && dose > 0 && f.unidadeDose === unidadeRef && (dose < faixa.min * 0.999 || dose > faixa.max * 1.001);
+  const acimaMax = faixa?.maxQtd && f.unidadeDose === unidadeRef && qtd > faixa.maxQtd;
   const proximos = horariosPrescricao(previa, new Date(previa.inicio), new Date(new Date(previa.inicio).getTime() + 48 * 3600_000)).slice(0, 8);
 
   const salvar = () => {
     if (!f.nome.trim()) return toast('Informe o nome do medicamento', 'erro');
     if (!dose) return toast('Informe a dose', 'erro');
-    if (f.unidadeDose !== 'mL/kg' && !conc) return toast('Informe a concentração/apresentação', 'erro');
+    if (!naForma && !conc) return toast('Informe a concentração/apresentação', 'erro');
     const nova: Prescricao = {
       ...previa,
       id: editar?.id ?? uid(),
@@ -99,6 +108,16 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
       ativa: editar?.ativa ?? true,
       suspensaEm: editar?.suspensaEm,
     };
+    if (!med && salvarNoBulario) {
+      const fx = { min: dose, max: dose, padrao: dose, freq: f.frequenciaHoras };
+      const novo: Medicamento = {
+        id: 'clin-' + uid(), nome: f.nome.trim(), comerciais: 'Cadastrado pela clínica', classe: f.classe as Medicamento['classe'], unidade: f.unidadeDose,
+        apresentacoes: [{ rotulo: naForma ? 'Uso conforme dose' : `${fmtNum(conc, 3)} ${unidadeAtivo(f.unidadeDose)}/${previa.forma}`, valor: naForma ? 1 : conc, forma: previa.forma }],
+        vias: [f.via], canina: p.especie === 'canina' ? fx : null, felina: p.especie === 'felina' ? fx : null, obs: f.observacoes || undefined,
+      };
+      nova.medicamentoId = novo.id;
+      atualizar((d) => { d.config.medicamentosClinica = [...(d.config.medicamentosClinica ?? []), novo]; });
+    }
     atualizarPaciente(p.id, (x) => {
       const i = x.prescricoes.findIndex((r) => r.id === nova.id);
       if (i >= 0) x.prescricoes[i] = nova;
@@ -121,7 +140,7 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
         </div>
         <div className="lista-meds">
           {lista.map((m) => {
-            const fx = p.especie === 'canina' ? m.canina : m.felina;
+            const fx = faixaDe(m, p.especie);
             return (
               <button type="button" key={m.id} className={`item-med ${!fx ? 'contra' : ''}`} onClick={() => escolher(m)}>
                 <div>
@@ -129,8 +148,8 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
                   <small>{m.comerciais}</small>
                 </div>
                 <div className="item-med-dir">
-                  <span className="badge badge-neutro">{m.classe}</span>
-                  {fx ? <small>{fmtNum(fx.min, 3)}{fx.max !== fx.min ? `–${fmtNum(fx.max, 3)}` : ''} {m.unidade}</small> : <small className="txt-perigo">Contraindicado</small>}
+                  <span className="badge badge-neutro">{m.daClinica ? 'Da clínica' : m.classe}</span>
+                  {fx ? <small>{textoFaixa(m, p.especie)}</small> : <small className={m.daClinica ? 'muted' : 'txt-perigo'}>{m.daClinica ? 'Sem dose para esta espécie' : 'Contraindicado'}</small>}
                 </div>
               </button>
             );
@@ -162,7 +181,7 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
         <div className="ref-med">
           <div><strong>{med.nome}</strong> <span className="muted">({med.comerciais})</span></div>
           {faixa ? (
-            <div><Info size={14} /> Referência {p.especie === 'canina' ? 'cães' : 'gatos'}: <b>{fmtNum(faixa.min, 3)}{faixa.max !== faixa.min && `–${fmtNum(faixa.max, 3)}`} {med.unidade}</b> a cada {faixa.freq} h • Vias: {med.vias.join(', ')}</div>
+            <div><Info size={14} /> Referência {p.especie === 'canina' ? 'cães' : 'gatos'}: <b>{textoFaixa(med, p.especie)}</b> a cada {faixa.freq} h • Vias: {med.vias.join(', ')}</div>
           ) : (
             <div className="txt-perigo"><AlertTriangle size={14} /> Sem dose de referência para esta espécie.</div>
           )}
@@ -179,15 +198,15 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
             <select value={f.classe} onChange={(e) => set('classe', e.target.value)}>{CLASSES.map((c) => <option key={c}>{c}</option>)}</select>
           </Campo>
         )}
-        <Campo rotulo="Dose">
+        <Campo rotulo="Dose" span={2}>
           <div className="input-grupo">
             <input inputMode="decimal" value={f.dose} onChange={(e) => set('dose', e.target.value)} className={fora ? 'input-alerta' : ''} />
             <select value={f.unidadeDose} onChange={(e) => set('unidadeDose', e.target.value as UnidadeDose)}>
-              {(['mg/kg', 'mcg/kg', 'UI/kg', 'mL/kg', 'g/kg'] as UnidadeDose[]).map((u) => <option key={u}>{u}</option>)}
+              {UNIDADES_DOSE.map((x) => <option key={x.u} value={x.u}>{x.r}</option>)}
             </select>
           </div>
         </Campo>
-        {f.unidadeDose !== 'mL/kg' && (
+        {!naForma && (
           <Campo rotulo="Apresentação / concentração" span={2}>
             {med ? (
               <select value={`${f.concentracao}|${f.forma}`} onChange={(e) => { const [c, fo] = e.target.value.split('|'); set('concentracao', c); set('forma', fo as FormaFarmaceutica); }}>
@@ -199,7 +218,7 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
                 <input inputMode="decimal" value={f.concentracao} onChange={(e) => set('concentracao', e.target.value)} placeholder="Ex.: 10" />
                 <span className="input-sufixo">{unidadeAtivo(f.unidadeDose)} por</span>
                 <select value={f.forma} onChange={(e) => set('forma', e.target.value as FormaFarmaceutica)}>
-                  <option value="mL">mL</option><option value="comprimido">comprimido</option><option value="cápsula">cápsula</option>
+                  <option value="mL">mL</option><option value="comprimido">comprimido</option><option value="cápsula">cápsula</option><option value="g">grama (pó/pasta)</option>
                 </select>
               </div>
             )}
@@ -238,12 +257,11 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
       <div className={`calc-resultado ${fora ? 'calc-alerta' : ''}`}>
         <Calculator size={22} />
         <div>
-          <div className="calc-linha">
-            Peso <b>{fmtNum(p.peso)} kg</b> × <b>{fmtNum(dose, 3)} {f.unidadeDose}</b> = <b>{fmtNum(dose * p.peso, 3)} {unidadeAtivo(f.unidadeDose)}</b>
-          </div>
+          <div className="calc-linha">{porAnimal(f.unidadeDose) ? <>Dose fixa, independente do peso: <b>{textoCalculo(dose, f.unidadeDose, p.peso).replace('dose fixa: ', '')}</b></> : <b>{textoCalculo(dose, f.unidadeDose, p.peso)}</b>}</div>
           <div className="calc-grande">Administrar: {qtd > 0 ? textoQuantidade(previa, p.peso) : '—'} <span>{f.via}</span></div>
-          {previa.forma !== 'mL' && qtd > 0 && <small className="muted">Valor exato: {fmtNum(qtd, 3)} {previa.forma}(s)</small>}
-          {fora && <div className="txt-perigo"><AlertTriangle size={14} /> Dose fora da faixa de referência ({fmtNum(faixa!.min, 3)}–{fmtNum(faixa!.max, 3)} {med!.unidade}). Confirme antes de salvar.</div>}
+          {(previa.forma === 'comprimido' || previa.forma === 'cápsula') && qtd > 0 && <small className="muted">Valor exato: {fmtNum(qtd, 3)} {previa.forma}(s)</small>}
+          {fora && <div className="txt-perigo"><AlertTriangle size={14} /> Dose fora da faixa de referência ({textoFaixa(med!, p.especie)}). Confirme antes de salvar.</div>}
+          {acimaMax && <div className="txt-perigo"><AlertTriangle size={14} /> Acima do máximo da bula ({faixa!.maxQtd} por administração).</div>}
         </div>
       </div>
 
@@ -255,6 +273,9 @@ export default function PrescricaoForm({ paciente: p, editar, onFechar }: { paci
             {proximos.length === 8 && <span className="muted">…</span>}
           </div>
         </div>
+      )}
+      {!med && !editar && pode.configurar && (
+        <label className="check mt"><input type="checkbox" checked={salvarNoBulario} onChange={(e) => setSalvarNoBulario(e.target.checked)} /> Salvar este medicamento no bulário da clínica para usar nas próximas prescrições</label>
       )}
       <p className="aviso-legal">Doses de referência são sugestões da literatura. A prescrição é de responsabilidade do médico-veterinário.</p>
     </Modal>

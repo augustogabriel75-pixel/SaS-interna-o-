@@ -4,11 +4,11 @@ import { Check, Undo2, XCircle } from 'lucide-react';
 import { Modal, Campo, Badge, useToast } from './ui';
 import { useStore, nomesEquipe } from '../store';
 import type { DoseAgendada } from '../utils/calc';
-import { textoQuantidade, fmtNum, unidadeAtivo } from '../utils/calc';
+import { textoQuantidade, fmtNum, textoCalculo } from '../utils/calc';
 import { fmtDataHora, toLocalInput, fromLocalInput, uid } from '../utils/format';
 
 export function rotuloDose(d: DoseAgendada['prescricao'], peso: number) {
-  return `${fmtNum(d.dose, 3)} ${d.unidadeDose} → ${fmtNum(d.dose * peso, 2)} ${unidadeAtivo(d.unidadeDose)} = ${textoQuantidade(d, peso)}`;
+  return `${textoCalculo(d.dose, d.unidadeDose, peso)} → ${textoQuantidade(d, peso)}`;
 }
 
 export const STATUS_DOSE = {
