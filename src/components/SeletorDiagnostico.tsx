@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, X, Search } from 'lucide-react';
-import { DIAGNOSTICOS } from '../data/diagnosticos';
+import { DIAGNOSTICOS, buscarDiagnosticos, normalizar } from '../data/diagnosticos';
 
 export default function SeletorDiagnostico({ valor, onChange }: { valor: string[]; onChange: (v: string[]) => void }) {
   const [busca, setBusca] = useState('');
@@ -9,7 +9,7 @@ export default function SeletorDiagnostico({ valor, onChange }: { valor: string[
   const resultados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return DIAGNOSTICOS.find((g) => g.sistema === sistema)?.itens ?? [];
-    return DIAGNOSTICOS.flatMap((g) => g.itens).filter((i) => i.toLowerCase().includes(q));
+    return buscarDiagnosticos(q);
   }, [busca, sistema]);
 
   const alternar = (d: string) => onChange(valor.includes(d) ? valor.filter((x) => x !== d) : [...valor, d]);
@@ -39,7 +39,7 @@ export default function SeletorDiagnostico({ valor, onChange }: { valor: string[
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionarLivre(); } }}
           placeholder="Buscar diagnóstico ou digitar um novo e pressionar Enter"
         />
-        {busca.trim() && !resultados.some((r) => r.toLowerCase() === busca.trim().toLowerCase()) && (
+        {busca.trim() && !resultados.some((r) => normalizar(r) === normalizar(busca.trim())) && (
           <button type="button" className="btn btn-sm btn-secundario" onClick={adicionarLivre}><Plus size={14} /> Adicionar</button>
         )}
       </div>
