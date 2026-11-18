@@ -1,7 +1,9 @@
-import { ArrowLeft, Pencil, MessageCircle, Phone, ShieldAlert, AlertTriangle, LayoutDashboard, Pill, CalendarClock, Activity, Droplets, FileText, LogOut } from 'lucide-react';
+import { ArrowLeft, Pencil, MessageCircle, Phone, ShieldAlert, AlertTriangle, LayoutDashboard, Pill, CalendarClock, Activity, Droplets, FileText, LogOut, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { usePode } from '../../auth';
 import { useStore, nomeBox } from '../../store';
-import { Abas, Badge, Vazio } from '../../components/ui';
+import { Abas, Badge, Vazio, Modal, useToast } from '../../components/ui';
+import { normalizar } from '../../data/diagnosticos';
 import { GRAV, IconeEspecie } from '../Painel';
 import { fmtData, tempoInternado, especieRotulo, sexoRotulo, linkWhatsApp } from '../../utils/format';
 import { dosesPaciente, fmtNum } from '../../utils/calc';
@@ -19,6 +21,10 @@ type AbaId = 'resumo' | 'prescricao' | 'execucao' | 'monitoramento' | 'fluido' |
 export default function PacientePage({ id, aba }: { id: string; aba?: string }) {
   const { db, paciente, agora } = useStore();
   const pode = usePode();
+  const toast = useToast();
+  const { excluirPaciente } = useStore();
+  const [excluindo, setExcluindo] = useState(false);
+  const [confirmaNome, setConfirmaNome] = useState('');
   const p = paciente(id);
   if (!p) return <div className="pagina"><Vazio titulo="Paciente não encontrado" acao={<button className="btn btn-primario" onClick={() => ir('/painel')}>Voltar ao mapa</button>} /></div>;
 
@@ -60,6 +66,7 @@ export default function PacientePage({ id, aba }: { id: string; aba?: string }) 
             {p.tutor.telefone && <a className="btn-icone" href={`tel:${p.tutor.telefone.replace(/\D/g, '')}`} title="Ligar"><Phone size={18} /></a>}
             {p.tutor.telefone && <a className="btn-icone whats" href={linkWhatsApp(p.tutor.telefone, `Olá, ${p.tutor.nome}! Aqui é da ${db.config.clinica}, sobre o(a) ${p.nome}.`)} target="_blank" rel="noreferrer" title="WhatsApp"><MessageCircle size={18} /></a>}
             {pode.editarPaciente && <button className="btn btn-sm btn-secundario" onClick={() => ir(`/internar?editar=${p.id}`)}><Pencil size={14} /> Editar dados</button>}
+            {pode.excluirPaciente && <button className="btn-icone perigo" title="Excluir paciente" aria-label="Excluir paciente" onClick={() => { setConfirmaNome(''); setExcluindo(true); }}><Trash2 size={18} /></button>}
           </div>
         </div>
       </div>
@@ -92,6 +99,30 @@ export default function PacientePage({ id, aba }: { id: string; aba?: string }) 
       {ativa === 'fluido' && <AbaFluido p={p} />}
       {ativa === 'boletim' && pode.boletim && <AbaBoletim p={p} />}
       {ativa === 'alta' && (pode.alta || !internado) && <AbaAlta key={p.id + p.status} p={p} />}
+      <Modal
+        aberto={excluindo}
+        onFechar={() => setExcluindo(false)}
+        titulo={`Excluir ${p.nome} do sistema?`}
+        rodape={<>
+          <span className="flex1" />
+          <button className="btn btn-secundario" onClick={() => setExcluindo(false)}>Cancelar</button>
+          <button className="btn btn-perigo" disabled={normalizar(confirmaNome.trim()) !== normalizar(p.nome.trim())} onClick={async () => {
+            const nome = p.nome;
+            setExcluindo(false);
+            ir('/painel');
+            await excluirPaciente(p.id);
+            toast(`${nome} foi excluído(a)`);
+          }}><Trash2 size={16} /> Excluir definitivamente</button>
+        </>}
+      >
+        <div className="aba-conteudo">
+          <div className="alerta-box"><AlertTriangle size={16} /> <span>Use só para cadastros de <b>teste</b> ou feitos por engano. Tudo deste paciente será apagado: prescrições, checagens, monitoramento e boletins. <b>Não dá para desfazer.</b> Para pacientes reais, use a aba Alta.</span></div>
+          <label className="campo" htmlFor="confirma-exclusao">
+            <span className="campo-rotulo">Para confirmar, digite o nome do paciente: <b>{p.nome}</b></span>
+            <input id="confirma-exclusao" value={confirmaNome} onChange={(e) => setConfirmaNome(e.target.value)} autoComplete="off" />
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -35,6 +35,7 @@ export interface Permissoes {
   evolucao: boolean;
   configurar: boolean;
   admin: boolean;
+  excluirPaciente: boolean;
 }
 
 export function permissoesDe(papel: Papel | 'local'): Permissoes {
@@ -51,6 +52,7 @@ export function permissoesDe(papel: Papel | 'local'): Permissoes {
     evolucao: true,
     configurar: papel === 'admin' || papel === 'local',
     admin: papel === 'admin',
+    excluirPaciente: papel === 'admin' || papel === 'local',
   };
 }
 

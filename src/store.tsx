@@ -223,6 +223,8 @@ interface Ctx {
   sync: EstadoSync;
   sincronizar: () => Promise<void>;
   carregarHistorico: () => Promise<number>;
+  /** Remove o paciente de vez (cadastro de teste ou feito por engano) */
+  excluirPaciente: (id: string) => Promise<void>;
 }
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -282,6 +284,7 @@ function StoreLocal({ children }: { children: ReactNode }) {
       sync: { modo: 'local', online: true, pendentes: 0, sincronizando: false, pronto: true },
       sincronizar: async () => {},
       carregarHistorico: async () => 0,
+      excluirPaciente: async (id) => setDb((d) => ({ ...d, pacientes: d.pacientes.filter((p) => p.id !== id) })),
     }),
     [db, atualizar, atualizarPaciente, agora],
   );
@@ -297,6 +300,7 @@ interface Cache {
   sujos: string[];
   cfgBase?: { versao: number; dados: Config };
   cfgSujo: boolean;
+  excluidos?: string[];
 }
 
 const DIAS_HISTORICO = 60;
@@ -330,12 +334,12 @@ function StoreNuvem({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<DB>(() => ({ versao: 2, config: structuredClone(CONFIG_PADRAO), pacientes: [], usuarioAtual: eu.nome }));
   const dbRef = useRef(db);
   const perfisRef = useRef<Perfil[]>([]);
-  const meta = useRef<{ base: Cache['base']; sujos: Set<string>; cfgBase?: Cache['cfgBase']; cfgSujo: boolean }>({ base: {}, sujos: new Set(), cfgSujo: false });
+  const meta = useRef<{ base: Cache['base']; sujos: Set<string>; cfgBase?: Cache['cfgBase']; cfgSujo: boolean; excluidos: Set<string> }>({ base: {}, sujos: new Set(), cfgSujo: false, excluidos: new Set() });
   const enviando = useRef(false);
   const [sync, setSync] = useState<EstadoSync>({ modo: 'nuvem', online: navigator.onLine, pendentes: 0, sincronizando: false, pronto: false });
 
   const atualizarContador = useCallback(() => {
-    const n = meta.current.sujos.size + (meta.current.cfgSujo ? 1 : 0);
+    const n = meta.current.sujos.size + meta.current.excluidos.size + (meta.current.cfgSujo ? 1 : 0);
     setSync((s) => (s.pendentes === n ? s : { ...s, pendentes: n }));
   }, []);
 
@@ -343,7 +347,7 @@ function StoreNuvem({ children }: { children: ReactNode }) {
   const salvarCache = useCallback(() => {
     clearTimeout(timerCache.current);
     timerCache.current = window.setTimeout(() => {
-      const c: Cache = { db: dbRef.current, base: meta.current.base, sujos: [...meta.current.sujos], cfgBase: meta.current.cfgBase, cfgSujo: meta.current.cfgSujo };
+      const c: Cache = { db: dbRef.current, base: meta.current.base, sujos: [...meta.current.sujos], cfgBase: meta.current.cfgBase, cfgSujo: meta.current.cfgSujo, excluidos: [...meta.current.excluidos] };
       idbSet(chaveCache, c).catch(() => {});
     }, 300);
   }, [chaveCache]);
@@ -365,10 +369,20 @@ function StoreNuvem({ children }: { children: ReactNode }) {
     definir(next);
   }, [definir]);
 
+  const removerLocal = useCallback((id: string) => {
+    const m = meta.current;
+    delete m.base[id];
+    m.sujos.delete(id);
+    if (dbRef.current.pacientes.some((p) => p.id === id)) {
+      definir({ ...dbRef.current, pacientes: dbRef.current.pacientes.filter((p) => p.id !== id) });
+    }
+  }, [definir]);
+
   const receberPaciente = useCallback((linha: LinhaPaciente) => {
     const m = meta.current;
     const base = m.base[linha.id];
     if (base && base.versao >= linha.versao) return; // já conhecido (ex.: eco da própria gravação)
+    if (m.excluidos.has(linha.id)) return; // exclusão aguardando envio
     const local = dbRef.current.pacientes.find((x) => x.id === linha.id);
     m.base[linha.id] = { versao: linha.versao, dados: linha.dados };
     if (m.sujos.has(linha.id) && local) substituirPaciente(mesclar(base?.dados, local, linha.dados));
@@ -399,6 +413,13 @@ function StoreNuvem({ children }: { children: ReactNode }) {
     setSync((s) => ({ ...s, sincronizando: true }));
     const m = meta.current;
     try {
+      for (const id of [...m.excluidos]) {
+        const r = await supabase.from('pacientes').delete().eq('id', id).select('id');
+        if (r.error && ehErroDeRede(r.error)) return;
+        if (r.error) toast(`Não foi possível excluir: ${r.error.message}`, 'erro');
+        else if (!r.data?.length) toast('Exclusão não permitida: somente o administrador exclui pacientes', 'erro');
+        m.excluidos.delete(id);
+      }
       for (const id of [...m.sujos]) {
         for (let tentativa = 0; tentativa < 4; tentativa++) {
           const local = dbRef.current.pacientes.find((x) => x.id === id);
@@ -487,9 +508,17 @@ function StoreNuvem({ children }: { children: ReactNode }) {
     else if (!cfg.error && eu.papel === 'admin' && !meta.current.cfgBase) {
       meta.current.cfgSujo = true; // primeira vez: grava a configuração padrão da clínica
     }
-    if (pac.data) (pac.data as LinhaPaciente[]).forEach(receberPaciente);
+    if (pac.data) {
+      const linhas = pac.data as LinhaPaciente[];
+      linhas.forEach(receberPaciente);
+      // internados que já estavam no servidor e sumiram foram excluídos em outro aparelho
+      const noServidor = new Set(linhas.map((l) => l.id));
+      for (const p of dbRef.current.pacientes) {
+        if (p.status === 'internado' && meta.current.base[p.id] && !meta.current.sujos.has(p.id) && !noServidor.has(p.id)) removerLocal(p.id);
+      }
+    }
     setSync((s) => ({ ...s, ultimaSync: pac.error ? s.ultimaSync : new Date() }));
-  }, [buscarPerfis, receberConfig, receberPaciente, eu.papel]);
+  }, [buscarPerfis, receberConfig, receberPaciente, removerLocal, eu.papel]);
 
   const sincronizar = useCallback(async () => {
     await puxar();
@@ -503,7 +532,7 @@ function StoreNuvem({ children }: { children: ReactNode }) {
       try {
         const c = await idbGet<Cache>(chaveCache);
         if (c && vivo) {
-          meta.current = { base: c.base ?? {}, sujos: new Set(c.sujos ?? []), cfgBase: c.cfgBase, cfgSujo: !!c.cfgSujo };
+          meta.current = { base: c.base ?? {}, sujos: new Set(c.sujos ?? []), cfgBase: c.cfgBase, cfgSujo: !!c.cfgSujo, excluidos: new Set(c.excluidos ?? []) };
           definir(c.db);
         }
       } catch {
@@ -521,7 +550,10 @@ function StoreNuvem({ children }: { children: ReactNode }) {
     const canal = supabase
       .channel('dados-clinica')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pacientes' }, (p) => {
-        if (p.new && (p.new as LinhaPaciente).dados) receberPaciente(p.new as LinhaPaciente);
+        if (p.eventType === 'DELETE') {
+          const id = (p.old as { id?: string })?.id;
+          if (id) removerLocal(id);
+        } else if (p.new && (p.new as LinhaPaciente).dados) receberPaciente(p.new as LinhaPaciente);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'config' }, (p) => {
         if (p.new && (p.new as { dados?: Config }).dados) receberConfig(p.new as { versao: number; dados: Config });
@@ -541,7 +573,7 @@ function StoreNuvem({ children }: { children: ReactNode }) {
       window.removeEventListener('offline', offline);
       clearInterval(t);
     };
-  }, [receberPaciente, receberConfig, buscarPerfis, puxar, sincronizar, enviar]);
+  }, [receberPaciente, receberConfig, buscarPerfis, puxar, sincronizar, enviar, removerLocal]);
 
   const atualizar = useCallback((fn: (d: DB) => void) => {
     const prev = dbRef.current;
@@ -565,6 +597,14 @@ function StoreNuvem({ children }: { children: ReactNode }) {
       }),
     [atualizar],
   );
+
+  const excluirPaciente = useCallback(async (id: string) => {
+    removerLocal(id);
+    meta.current.excluidos.add(id);
+    salvarCache();
+    atualizarContador();
+    await enviar();
+  }, [removerLocal, salvarCache, atualizarContador, enviar]);
 
   const carregarHistorico = useCallback(async () => {
     const { data, error } = await supabase.from('pacientes').select('id, versao, dados');
@@ -593,8 +633,9 @@ function StoreNuvem({ children }: { children: ReactNode }) {
       sync,
       sincronizar,
       carregarHistorico,
+      excluirPaciente,
     }),
-    [db, atualizar, atualizarPaciente, agora, sync, sincronizar, carregarHistorico, toast],
+    [db, atualizar, atualizarPaciente, agora, sync, sincronizar, carregarHistorico, excluirPaciente, toast],
   );
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;

@@ -172,6 +172,19 @@ drop trigger if exists registrar_atividade on public.pacientes;
 create trigger registrar_atividade after insert or update on public.pacientes
   for each row execute function public.registrar_atividade();
 
+-- Registro de exclusão de paciente (cadastros de teste ou feitos por engano)
+create or replace function public.registrar_exclusao() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.atividades (usuario_id, usuario_nome, acao, paciente_id, paciente_nome)
+  values (auth.uid(), (select nome from public.perfis where id = auth.uid()), 'excluiu o paciente', old.id, old.dados ->> 'nome');
+  return old;
+end $$;
+
+drop trigger if exists registrar_exclusao on public.pacientes;
+create trigger registrar_exclusao after delete on public.pacientes
+  for each row execute function public.registrar_exclusao();
+
 -- ───────── Segurança por linha (RLS)
 alter table public.perfis enable row level security;
 alter table public.config enable row level security;
